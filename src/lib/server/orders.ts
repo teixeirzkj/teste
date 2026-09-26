@@ -2,8 +2,8 @@ import "server-only";
 import { z } from "zod";
 import { iso, json, q, tx, type Param, type Row } from "./db";
 import { getSettings, listCategories, rowToProduct } from "./catalog";
-import { formatPhone } from "../format";
-import type { Addon, Address, Order, OrderItem, OrderOrigin, OrderStatus } from "../types";
+import { flavorLabel, flavorPrice, formatPhone } from "../format";
+import type { Addon, Address, Flavor, Order, OrderItem, OrderOrigin, OrderStatus } from "../types";
 
 const str = (max: number) => z.string().trim().max(max);
 
@@ -13,6 +13,8 @@ export const orderItemSchema = z.object({
   qty: z.number().int().min(1).max(50),
   addons: z.array(str(80)).max(20).default([]),
   notes: str(300).default(""),
+  /** Outros sabores (ids de produto) além do principal, para pizza fracionada. */
+  flavors: z.array(z.number().int().positive()).max(3).default([]),
 });
 
 export const orderSchema = z.object({
@@ -59,6 +61,7 @@ function rowToItem(r: Row): OrderItem {
     unitPrice: Number(r.unit_price),
     addons: json<Addon[]>(r.addons, []),
     ingredients: json<string[]>(r.ingredients, []),
+    flavors: json<Flavor[]>(r.flavors, []),
     notes: String(r.notes ?? ""),
     total: Number(r.total),
   };
@@ -181,7 +184,7 @@ export async function createOrder(input: OrderInput, opts: CreateOpts): Promise<
   const allCats = await listCategories();
   const activeCats = new Set(allCats.filter((c) => c.active).map((c) => c.id));
   const cats = new Map(allCats.map((c) => [c.id, c.name]));
-  const ids = [...new Set(input.items.map((i) => i.productId))];
+  const ids = [...new Set(input.items.flatMap((i) => [i.productId, ...i.flavors]))];
   const productRows = await q("SELECT * FROM products WHERE id IN (SELECT jsonb_array_elements_text($1::text::jsonb)::int)", [JSON.stringify(ids)]);
   const byId = new Map(productRows.map((r) => [Number(r.id), rowToProduct(r)]));
 
@@ -193,17 +196,35 @@ export async function createOrder(input: OrderInput, opts: CreateOpts): Promise<
     }
     const size = p.sizes.find((s) => s.name === it.size) ?? (p.sizes.length === 1 ? p.sizes[0] : undefined);
     if (!size) throw new OrderError(`Escolha um tamanho válido para "${p.name}".`);
+    // Sabores extras: mesma categoria, mesmo tamanho disponível e dentro do limite do tamanho.
+    const extra = [...new Set(it.flavors)].filter((id) => id !== p.id);
+    const maxFlavors = size.flavors ?? 1;
+    if (extra.length > maxFlavors - 1) throw new OrderError(`"${size.name}" aceita no máximo ${maxFlavors} sabor(es).`);
+    const flavorProducts = extra.map((id) => {
+      const fp = byId.get(id);
+      if (!fp || fp.categoryId !== p.categoryId) throw new OrderError("Sabor inválido para esta pizza.");
+      if (opts.enforceStore && !fp.active) throw new OrderError(`O sabor "${fp.name}" não está disponível no momento.`);
+      const fs = fp.sizes.find((x) => x.name === size.name);
+      if (!fs) throw new OrderError(`"${fp.name}" não tem o tamanho ${size.name}.`);
+      return { fp, price: fs.price };
+    });
+    const allFlavors = [{ fp: p, price: size.price }, ...flavorProducts];
+    const flavors: Flavor[] = extra.length ? allFlavors.map(({ fp }) => ({ productId: fp.id, name: fp.name, description: fp.description })) : [];
+    const basePrice = extra.length ? flavorPrice(allFlavors.map((x) => x.price)) : size.price;
+
     const addons: Addon[] = [];
     for (const name of new Set(it.addons)) {
       const a = p.addons.find((x) => x.name === name);
       if (!a) throw new OrderError(`Adicional inválido em "${p.name}".`);
       addons.push(a);
     }
-    const unit = size.price + addons.reduce((s, a) => s + a.price, 0);
+    const unit = basePrice + addons.reduce((s, a) => s + a.price, 0);
     const total = unit * it.qty;
     const costPct = p.costPercent ?? settings.defaultCostPercent;
     return {
       p,
+      name: extra.length ? flavorLabel(flavors.map((x) => x.name)) : p.name,
+      flavors,
       category: cats.get(p.categoryId) ?? "",
       size: size.name,
       qty: it.qty,
@@ -253,16 +274,17 @@ export async function createOrder(input: OrderInput, opts: CreateOpts): Promise<
       ]
     );
     await d.query(
-      `INSERT INTO order_items (order_id, product_id, name, category, size, qty, unit_price, addons, ingredients, notes, total, cost)
-       SELECT $1, product_id, name, category, size, qty, unit_price, addons, ingredients, notes, total, cost
+      `INSERT INTO order_items (order_id, product_id, name, category, size, qty, unit_price, addons, ingredients, flavors, notes, total, cost)
+       SELECT $1, product_id, name, category, size, qty, unit_price, addons, ingredients, flavors, notes, total, cost
        FROM jsonb_to_recordset($2::text::jsonb) AS x(product_id int, name text, category text, size text, qty int, unit_price int,
-         addons jsonb, ingredients jsonb, notes text, total int, cost int)`,
+         addons jsonb, ingredients jsonb, flavors jsonb, notes text, total int, cost int)`,
       [
         o.id,
         JSON.stringify(
           lines.map((l) => ({
             product_id: l.p.id,
-            name: l.p.name,
+            name: l.name,
+            flavors: l.flavors,
             category: l.category,
             size: l.size,
             qty: l.qty,

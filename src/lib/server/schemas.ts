@@ -20,7 +20,12 @@ export const productSchema = z.object({
   ingredients: z.array(str(60).min(1)).max(30).default([]),
   image: imagePath,
   sizes: z
-    .array(z.object({ name: str(40).min(1, "Informe o nome do tamanho."), price: cents, oldPrice: cents.nullable().optional() }))
+    .array(z.object({
+        name: str(40).min(1, "Informe o nome do tamanho."),
+        price: cents,
+        oldPrice: cents.nullable().optional(),
+        flavors: z.number().int().min(1).max(4).optional(),
+      }))
     .min(1, "Informe ao menos um preço.")
     .max(10),
   addons: z.array(z.object({ name: str(80).min(1, "Informe o nome do adicional."), price: cents })).max(40).default([]),

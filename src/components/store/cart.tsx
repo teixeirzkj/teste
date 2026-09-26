@@ -11,6 +11,8 @@ export type CartItem = {
   size: string;
   unitPrice: number; // estimativa exibida; o servidor recalcula no pedido
   addons: Addon[];
+  /** Sabores extras (pizza fracionada). O sabor principal é o próprio produto. */
+  flavors?: { id: number; name: string }[];
   notes: string;
   qty: number;
 };
@@ -78,6 +80,7 @@ export function StoreProvider({ data, children }: { data: StoreData; children: R
           c.productId === item.productId &&
           c.size === item.size &&
           c.notes === item.notes &&
+          (c.flavors ?? []).map((f) => f.id).sort().join() === (item.flavors ?? []).map((f) => f.id).sort().join() &&
           c.addons.map((a) => a.name).sort().join() === item.addons.map((a) => a.name).sort().join()
       );
       if (same) return cur.map((c) => (c === same ? { ...c, qty: Math.min(50, c.qty + item.qty) } : c));

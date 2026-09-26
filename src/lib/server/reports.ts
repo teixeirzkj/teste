@@ -61,10 +61,13 @@ export async function buildReport(from: string, to: string) {
     org.revenue += o.total;
     origins.set(oname, org);
     for (const it of o.items) {
-      const p = products.get(it.name) ?? { name: it.name, qty: 0, revenue: 0 };
-      p.qty += it.qty;
-      p.revenue += it.total;
-      products.set(it.name, p);
+      const parts = it.flavors?.length ? it.flavors.map((f) => f.name) : [it.name];
+      for (const name of parts) {
+        const p = products.get(name) ?? { name, qty: 0, revenue: 0 };
+        p.qty += it.qty / parts.length;
+        p.revenue += Math.round(it.total / parts.length);
+        products.set(name, p);
+      }
       const cname = it.category || "Sem categoria";
       const c = categories.get(cname) ?? { name: cname, qty: 0, revenue: 0 };
       c.qty += it.qty;
@@ -79,7 +82,7 @@ export async function buildReport(from: string, to: string) {
     totals: summarize(orders),
     previous: prev,
     byDay: [...days.values()],
-    topProducts: [...products.values()].sort((a, b) => b.qty - a.qty || b.revenue - a.revenue),
+    topProducts: [...products.values()].map((p) => ({ ...p, qty: Math.round(p.qty * 10) / 10 })).sort((a, b) => b.qty - a.qty || b.revenue - a.revenue),
     categories: [...categories.values()].sort(byRevenue),
     payments: [...payments.values()].sort(byRevenue),
     origins: [...origins.values()].sort(byRevenue),

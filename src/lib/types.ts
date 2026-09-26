@@ -1,7 +1,10 @@
 // Tipos compartilhados entre servidor e cliente.
 // Todos os valores monetários são inteiros em centavos.
 
-export type Size = { name: string; price: number; oldPrice?: number | null };
+/** flavors: quantos sabores cabem nesse tamanho (ex.: P = 2, M = 3, G = 3). */
+export type Size = { name: string; price: number; oldPrice?: number | null; flavors?: number };
+/** Sabor de uma pizza fracionada (meio a meio / 1/3). */
+export type Flavor = { productId: number; name: string; description: string };
 export type Addon = { name: string; price: number };
 
 export type Category = {
@@ -85,6 +88,7 @@ export type OrderItem = {
   addons: Addon[];
   notes: string;
   ingredients: string[];
+  flavors: Flavor[];
   total: number;
 };
 

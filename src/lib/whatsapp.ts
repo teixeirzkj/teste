@@ -16,7 +16,10 @@ export function buildOrderMessage(order: Order, settings: Settings): string {
     L.push("");
     const size = it.size && it.size !== "Único" ? ` — ${it.size}` : "";
     L.push(`*${it.qty}x ${it.name}${size}* (${money(it.total)})`);
-    if (it.ingredients.length) L.push(`_${it.ingredients.join(", ")}_`);
+    if (it.flavors?.length) {
+      const frac = `1/${it.flavors.length}`;
+      for (const f of it.flavors) L.push(`🍕 ${frac} ${f.name}${f.description ? ` — _${f.description}_` : ""}`);
+    } else if (it.ingredients.length) L.push(`_${it.ingredients.join(", ")}_`);
     if (it.addons.length) {
       L.push("➕ *Adicionais:*");
       for (const a of it.addons) L.push(`- ${a.name} (+${money(a.price)})`);

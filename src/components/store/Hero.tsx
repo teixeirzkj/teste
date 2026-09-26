@@ -192,7 +192,7 @@ export function Hero() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_62%_55%,#2a1a07_0%,#120c05_35%,#070707_70%)] max-lg:bg-[radial-gradient(ellipse_at_50%_58%,#2a1a07_0%,#120c05_40%,#070707_75%)]" />
         <motion.div
           style={{ opacity: glow }}
-          className="absolute left-1/2 top-[58%] h-[70vmin] w-[70vmin] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold-500/25 blur-[110px] lg:left-[64%] lg:top-1/2"
+          className="absolute left-1/2 top-[63%] h-[70vmin] w-[70vmin] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold-500/25 blur-[110px] lg:left-[64%] lg:top-[64%]"
         />
         <motion.div style={{ y: skyY }} className="absolute inset-x-0 bottom-0 text-gold-500/[0.07]">
           <Skyline className="h-[26vh] w-full" />
@@ -242,13 +242,13 @@ export function Hero() {
         {/* Pizza */}
         <motion.div
           style={{ x: px, y: py }}
-          className="absolute left-1/2 top-[58%] -translate-x-1/2 -translate-y-1/2 [perspective:1400px] lg:left-[64%] lg:top-[54%]"
+          className="absolute left-1/2 top-[63%] -translate-x-1/2 -translate-y-1/2 [perspective:1400px] lg:left-[64%] lg:top-[64%]"
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.55, rotate: -140, y: 60 }}
             animate={{ opacity: 1, scale: 1, rotate: 0, y: 0 }}
             transition={{ type: "spring", stiffness: 60, damping: 16, delay: 0.25 }}
-            className="relative aspect-square w-[80vw] max-w-[420px] lg:w-[min(46vw,76vh)] lg:max-w-none"
+            className="relative aspect-square w-[74vw] max-w-[390px] lg:w-[min(36vw,58vh)] lg:max-w-none"
           >
             <motion.div style={{ scale, rotateX: tilt }} className="absolute inset-0 [transform-style:preserve-3d]">
               <div className="absolute inset-[4%] translate-y-[7%] rounded-full bg-black/80 blur-2xl" />

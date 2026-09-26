@@ -27,7 +27,7 @@ const SAMPLE: Order = {
   notes: "",
   createdAt: "",
   updatedAt: "",
-  items: [{ id: 1, productId: 1, name: "Pizza Calabresa", category: "Pizzas", size: "Grande", qty: 1, unitPrice: 5290, addons: [], ingredients: ["Mussarela", "Calabresa", "Cebola", "Orégano"], notes: "", total: 5290 }],
+  items: [{ id: 1, productId: 1, name: "Pizza Calabresa", category: "Pizzas", size: "Grande", qty: 1, unitPrice: 5290, addons: [], ingredients: ["Mussarela", "Calabresa", "Cebola", "Orégano"], flavors: [], notes: "", total: 5290 }],
 };
 
 export function SettingsPage({ me }: { me: AdminUser }) {

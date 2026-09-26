@@ -269,7 +269,14 @@ function CheckoutStep({ onDone }: { onDone: (r: { number: number; total: number;
           payment,
           changeFor: payObj?.allowChange && needChange ? parseMoney(changeFor) : null,
           notes,
-          items: items.map((i) => ({ productId: i.productId, size: i.size, qty: i.qty, addons: i.addons.map((a) => a.name), notes: i.notes })),
+          items: items.map((i) => ({
+            productId: i.productId,
+            size: i.size,
+            qty: i.qty,
+            addons: i.addons.map((a) => a.name),
+            flavors: (i.flavors ?? []).map((f) => f.id),
+            notes: i.notes,
+          })),
         }),
       });
       const data = await res.json();

@@ -61,3 +61,16 @@ export function slugify(s: string): string {
 export function mapsLink(parts: string[]): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(parts.filter(Boolean).join(", "))}`;
 }
+
+/** Preço de uma pizza fracionada: média dos sabores (cada um vale sua fração). */
+export function flavorPrice(prices: number[]): number {
+  if (!prices.length) return 0;
+  return Math.round(prices.reduce((s, p) => s + p, 0) / prices.length);
+}
+
+/** "1/2 Calabresa + 1/2 Bacon" */
+export function flavorLabel(names: string[]): string {
+  if (names.length < 2) return names[0] ?? "";
+  const frac = `1/${names.length}`;
+  return names.map((n) => `${frac} ${n}`).join(" + ");
+}

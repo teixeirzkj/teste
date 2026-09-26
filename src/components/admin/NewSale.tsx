@@ -5,10 +5,10 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Minus, Plus, Search, Trash2 } from "lucide-react";
 import { Button, Card, Empty, Field, Modal, PageHeader, Skeleton, api, inputCls, useFetch, useToast } from "./ui";
-import { centsToInput, formatPhone, minPrice, money, parseMoney } from "@/lib/format";
+import { centsToInput, flavorLabel, flavorPrice, formatPhone, minPrice, money, parseMoney } from "@/lib/format";
 import type { Addon, Category, DeliveryType, Order, OrderOrigin, OrderStatus, Product, Settings } from "@/lib/types";
 
-type Line = { key: string; product: Product; size: string; addons: Addon[]; notes: string; qty: number; unit: number };
+type Line = { key: string; product: Product; flavors: Product[]; size: string; addons: Addon[]; notes: string; qty: number; unit: number };
 
 const ORIGINS: { v: OrderOrigin; l: string }[] = [
   { v: "balcao", l: "Balcão" },
@@ -57,7 +57,7 @@ export function NewSale() {
   const add = (l: Omit<Line, "key">) => setLines((c) => [...c, { ...l, key: Math.random().toString(36).slice(2) }]);
 
   const quick = (p: Product) => {
-    if (p.sizes.length === 1 && !p.addons.length) add({ product: p, size: p.sizes[0].name, addons: [], notes: "", qty: 1, unit: p.sizes[0].price });
+    if (p.sizes.length === 1 && !p.addons.length) add({ product: p, flavors: [], size: p.sizes[0].name, addons: [], notes: "", qty: 1, unit: p.sizes[0].price });
     else setPicking(p);
   };
 
@@ -88,7 +88,14 @@ export function NewSale() {
           origin,
           status,
           deliveryFee: delivery === "delivery" ? feeCents : null,
-          items: lines.map((l) => ({ productId: l.product.id, size: l.size, qty: l.qty, addons: l.addons.map((a) => a.name), notes: l.notes })),
+          items: lines.map((l) => ({
+            productId: l.product.id,
+            size: l.size,
+            qty: l.qty,
+            addons: l.addons.map((a) => a.name),
+            flavors: l.flavors.map((x) => x.id),
+            notes: l.notes,
+          })),
         },
       });
       setLast(r.order);
@@ -182,7 +189,7 @@ export function NewSale() {
                   <li key={l.key} className="rounded-xl bg-cream-50 p-2.5 text-sm">
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-bold">
-                        {l.product.name}
+                        {l.flavors.length ? flavorLabel([l.product.name, ...l.flavors.map((x) => x.name)]) : l.product.name}
                         {l.size !== "Único" && <span className="font-semibold text-ink-500"> · {l.size}</span>}
                       </p>
                       <button onClick={() => setLines((c) => c.filter((x) => x.key !== l.key))} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-red-600 hover:bg-red-50" aria-label="Remover">
@@ -292,6 +299,7 @@ export function NewSale() {
       {picking && (
         <Picker
           product={picking}
+          all={menu.data?.products ?? []}
           onClose={() => setPicking(null)}
           onAdd={(l) => {
             add(l);
@@ -318,17 +326,32 @@ function Segment<T extends string>({ label, value, onChange, options }: { label:
   );
 }
 
-function Picker({ product: p, onClose, onAdd }: { product: Product; onClose: () => void; onAdd: (l: Omit<Line, "key">) => void }) {
+function Picker({ product: p, all, onClose, onAdd }: { product: Product; all: Product[]; onClose: () => void; onAdd: (l: Omit<Line, "key">) => void }) {
   const [size, setSize] = useState(p.sizes.find((s) => s.name === "Grande")?.name ?? p.sizes[0].name);
   const [addons, setAddons] = useState<string[]>([]);
+  const [extra, setExtra] = useState<number[]>([]);
   const [notes, setNotes] = useState("");
   const [qty, setQty] = useState(1);
   const s = p.sizes.find((x) => x.name === size) ?? p.sizes[0];
+  const maxFlavors = s.flavors ?? 1;
+  const priceAt = (x: Product) => x.sizes.find((z) => z.name === s.name)?.price;
+  const candidates = all.filter((x) => x.active && x.categoryId === p.categoryId && x.id !== p.id && priceAt(x) != null);
+  const extraProducts = extra.map((id) => all.find((x) => x.id === id)).filter((x): x is Product => !!x && priceAt(x) != null);
+  const base = extraProducts.length ? flavorPrice([s.price, ...extraProducts.map((x) => priceAt(x)!)]) : s.price;
   const chosen = p.addons.filter((a) => addons.includes(a.name));
-  const unit = s.price + chosen.reduce((t, a) => t + a.price, 0);
+  const unit = base + chosen.reduce((t, a) => t + a.price, 0);
+  const full = extra.length >= maxFlavors - 1;
+
+  const chooseSize = (name: string) => {
+    setSize(name);
+    const max = p.sizes.find((z) => z.name === name)?.flavors ?? 1;
+    setExtra((cur) => cur.slice(0, Math.max(0, max - 1)));
+  };
+
   return (
     <Modal
       open
+      wide={maxFlavors > 1}
       onClose={onClose}
       title={p.name}
       footer={
@@ -342,20 +365,49 @@ function Picker({ product: p, onClose, onAdd }: { product: Product; onClose: () 
               <Plus className="h-4 w-4" />
             </button>
           </div>
-          <Button variant="flame" onClick={() => onAdd({ product: p, size: s.name, addons: chosen, notes: notes.trim(), qty, unit })}>
+          <Button variant="flame" onClick={() => onAdd({ product: p, flavors: extraProducts, size: s.name, addons: chosen, notes: notes.trim(), qty, unit })}>
             Adicionar · {money(unit * qty)}
           </Button>
         </>
       }
     >
       {p.sizes.length > 1 && (
-        <div className="mb-4 grid grid-cols-2 gap-2">
+        <div className="mb-4 grid grid-cols-3 gap-2">
           {p.sizes.map((x) => (
-            <button key={x.name} onClick={() => setSize(x.name)} className={`rounded-xl border p-3 text-left ${x.name === size ? "border-ink-950 bg-ink-950 text-white" : "border-cream-200"}`}>
+            <button key={x.name} onClick={() => chooseSize(x.name)} className={`rounded-xl border p-3 text-left ${x.name === size ? "border-ink-950 bg-ink-950 text-white" : "border-cream-200"}`}>
               <span className="block text-sm font-bold">{x.name}</span>
               <span className="text-sm opacity-75">{money(x.price)}</span>
+              {(x.flavors ?? 1) > 1 && <span className="block text-[11px] font-semibold opacity-60">até {x.flavors} sabores</span>}
             </button>
           ))}
+        </div>
+      )}
+      {maxFlavors > 1 && (
+        <div className="mb-4">
+          <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-ink-600">
+            Sabores ({1 + extraProducts.length}/{maxFlavors}) · média dos preços
+          </span>
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            <span className="rounded-full bg-gold-400 px-3 py-1.5 text-xs font-bold text-ink-950">
+              1/{1 + extraProducts.length} {p.name}
+            </span>
+            {extraProducts.map((x) => (
+              <button key={x.id} onClick={() => setExtra((c) => c.filter((id) => id !== x.id))} className="rounded-full bg-gold-400 px-3 py-1.5 text-xs font-bold text-ink-950" aria-label={`Remover ${x.name}`}>
+                1/{1 + extraProducts.length} {x.name} ✕
+              </button>
+            ))}
+          </div>
+          {!full && (
+            <div className="flex max-h-44 flex-wrap gap-1.5 overflow-y-auto rounded-xl border border-cream-200 p-2">
+              {candidates
+                .filter((x) => !extra.includes(x.id))
+                .map((x) => (
+                  <button key={x.id} onClick={() => setExtra((c) => [...c, x.id])} className="rounded-full bg-cream-100 px-3 py-1.5 text-xs font-bold text-ink-700 hover:bg-cream-200">
+                    + {x.name} <span className="font-semibold text-ink-500">{money(priceAt(x)!)}</span>
+                  </button>
+                ))}
+            </div>
+          )}
         </div>
       )}
       {p.addons.length > 0 && (

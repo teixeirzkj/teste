@@ -2,7 +2,7 @@ import "server-only";
 import type { Db } from "./db";
 import { json } from "./db";
 import { hashPassword } from "./password";
-import type { Addon, Settings, Size } from "../types";
+import type { Settings, Size } from "../types";
 
 export const DEFAULT_SETTINGS: Settings = {
   storeName: "Pizzaria São Paulo",
@@ -35,269 +35,143 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 const R = (v: number) => Math.round(v * 100);
-const pizzaSizes = (p: number, m: number, g: number, f: number, old?: number): Size[] => [
-  { name: "Pequena", price: R(p) },
-  { name: "Média", price: R(m) },
-  { name: "Grande", price: R(g), oldPrice: old ? R(old) : null },
-  { name: "Família", price: R(f) },
-];
-const single = (v: number, old?: number): Size[] => [{ name: "Único", price: R(v), oldPrice: old ? R(old) : null }];
 
-export const PIZZA_ADDONS: Addon[] = [
-  { name: "Catupiry", price: 600 },
-  { name: "Cheddar", price: 600 },
-  { name: "Bacon", price: 700 },
-  { name: "Calabresa", price: 600 },
-  { name: "Queijo extra", price: 600 },
-  { name: "Borda recheada de catupiry", price: 1000 },
-  { name: "Borda recheada de cheddar", price: 1000 },
+/**
+ * Tamanhos das pizzas: preço do cardápio = Pequena; Média +R$ 5; Grande +R$ 15.
+ * Pequena aceita até 2 sabores (meio a meio); Média e Grande até 3 (1/3 cada).
+ */
+export const pizzaSizes = (p: number): Size[] => [
+  { name: "Pequena", price: R(p), flavors: 2 },
+  { name: "Média", price: R(p + 5), flavors: 3 },
+  { name: "Grande", price: R(p + 15), flavors: 3 },
 ];
-const SWEET_ADDONS: Addon[] = [
-  { name: "Leite condensado", price: 400 },
-  { name: "Morango extra", price: 600 },
-  { name: "Borda de chocolate", price: 1000 },
-];
+const single = (v: number): Size[] => [{ name: "Único", price: R(v) }];
 
 type SeedProduct = {
   name: string;
   description: string;
-  ingredients: string[];
   image: string;
   sizes: Size[];
-  addons?: Addon[];
-  promo?: boolean;
   best?: boolean;
-  isNew?: boolean;
+  soldOut?: boolean; // "Esgotado" no cardápio antigo: entra desativado
 };
 
+const pz = (name: string, description: string, price: number, image: string, extra: Partial<SeedProduct> = {}): SeedProduct => ({
+  name,
+  description,
+  image: `/img/${image}.webp`,
+  sizes: pizzaSizes(price),
+  ...extra,
+});
+const drink = (name: string, price: number, image: string, extra: Partial<SeedProduct> = {}): SeedProduct => ({
+  name,
+  description: "",
+  image: `/img/${image}.webp`,
+  sizes: single(price),
+  ...extra,
+});
+
+/** Cardápio da Pizzaria São Paulo (conforme o cardápio que o cliente usa hoje). */
 const CATALOG: { name: string; image: string; products: SeedProduct[] }[] = [
   {
     name: "Pizzas",
     image: "/img/calabresa.webp",
     products: [
-      {
-        name: "Calabresa",
-        description: "A clássica que nunca sai de moda, com calabresa fatiada e cebola.",
-        ingredients: ["Molho de tomate", "Mussarela", "Calabresa", "Cebola", "Orégano"],
-        image: "/img/calabresa.webp",
-        sizes: pizzaSizes(32.9, 42.9, 52.9, 64.9),
-        best: true,
-      },
-      {
-        name: "Frango com Catupiry",
-        description: "Frango desfiado temperado coberto com o legítimo Catupiry.",
-        ingredients: ["Molho de tomate", "Mussarela", "Frango desfiado", "Catupiry", "Orégano"],
-        image: "/img/frango-catupiry.webp",
-        sizes: pizzaSizes(34.9, 44.9, 54.9, 66.9),
-        best: true,
-      },
-      {
-        name: "Mussarela",
-        description: "Muito queijo, rodelas de tomate e orégano. Simples e perfeita.",
-        ingredients: ["Molho de tomate", "Mussarela", "Tomate", "Orégano"],
-        image: "/img/mussarela.webp",
-        sizes: pizzaSizes(29.9, 38.9, 48.9, 59.9),
-      },
-      {
-        name: "Margherita",
-        description: "Tomate, mussarela e manjericão fresco com um fio de azeite.",
-        ingredients: ["Molho de tomate", "Mussarela", "Tomate", "Manjericão fresco", "Azeite"],
-        image: "/img/margherita.webp",
-        sizes: pizzaSizes(32.9, 42.9, 52.9, 64.9),
-      },
-      {
-        name: "Portuguesa",
-        description: "Recheio generoso de presunto, ovos, cebola, ervilha e azeitona.",
-        ingredients: ["Molho de tomate", "Mussarela", "Presunto", "Ovos", "Cebola", "Ervilha", "Azeitona"],
-        image: "/img/portuguesa.webp",
-        sizes: pizzaSizes(34.9, 44.9, 54.9, 66.9),
-        best: true,
-      },
-      {
-        name: "Pepperoni",
-        description: "Fatias de pepperoni levemente picante sobre mussarela derretida.",
-        ingredients: ["Molho de tomate", "Mussarela", "Pepperoni", "Orégano"],
-        image: "/img/pepperoni.webp",
-        sizes: pizzaSizes(36.9, 46.9, 56.9, 69.9),
-        isNew: true,
-      },
-      {
-        name: "Bacon com Cebola",
-        description: "Bacon crocante, cebola roxa e muito queijo.",
-        ingredients: ["Molho de tomate", "Mussarela", "Bacon", "Cebola roxa", "Orégano"],
-        image: "/img/bacon-cebola.webp",
-        sizes: pizzaSizes(34.9, 44.9, 54.9, 66.9),
-      },
+      pz("Atum Sólido", "Atum em pedaços com mussarela e tomate, com ou sem cebola!", 45, "bacon-cebola"),
+      pz("Brócolis com Palmito", "Brócolis com palmito e catupiry ervas finas.", 40, "sao-paulo-especial"),
+      pz("Amoda Dra. (Especial da Casa)", "Lombinho, cebola, milho, mussarela, rodelas de tomate e parmesão.", 40, "moda-da-casa"),
+      pz("1 Alho e Óleo (Especial da Casa)", "Alho frito com parmesão ralado.", 40, "mussarela"),
+      pz("A Moda da Casa (Especial da Casa)", "Ovo, requeijão, bacon e parmesão ralado. Atenção alérgicos: contém ovos!", 42, "cta-pizza"),
+      pz("A Moda do Mestre (Especial da Casa)", "Rocambole de frango recheado com presunto.", 40, "moda-da-casa", { soldOut: true }),
+      pz("Brócolis Especial (Especial da Casa)", "Brócolis com requeijão, bacon e tomate com um toque de gorgonzola.", 42, "rucula-tomate-seco"),
+      pz("Brócolis Tradicional", "Brócolis com mussarela e tomate.", 40, "sao-paulo-especial"),
+      pz("Baiana Tradicional", "Calabresa moída com ou sem cebola, coberta com mussarela.", 40, "pepperoni-box"),
+      pz("Bacon", "Bacon com mussarela.", 40, "bacon-cebola"),
+      pz("Calabresa com Mussarela", "Calabresa com mussarela e com ou sem cebola.", 40, "calabresa", { best: true }),
+      pz("Calabresa com Requeijão", "Calabresa fatiada coberta com requeijão, com ou sem cebola.", 40, "calabresa"),
+      pz("Champignon (Especial da Casa)", "Champignon (cogumelo) coberto com requeijão e com mussarela.", 43, "cta-pizza", { soldOut: true }),
+      pz("Calafrango Paulista (Especial da Casa)", "Calabresa fatiada, frango desfiado coberto com requeijão e mussarela, com ou sem cebola.", 40, "frango-catupiry"),
+      pz("Calabresa Tradicional", "Calabresa acebolada ou sem cebola, sem mussarela.", 40, "calabresa"),
+      pz("Calabresa Especial (Especial da Casa)", "Linguiça de pernil coberta com mussarela, com ou sem cebola.", 40, "toscana"),
+      pz("Frango com Requeijão Cremoso (Especial da Casa)", "Frango desfiado coberto com requeijão cremoso puro. Original (sem amido e sem gordura hidrogenada).", 40, "frango-catupiry", { best: true }),
+      pz("Frango com Catupiry Original (Especial da Casa)", "Frango desfiado coberto com queijo da marca Catupiry original.", 42, "frango-catupiry"),
+      pz("Frango com Mussarela", "Frango desfiado com mussarela.", 40, "mussarela"),
+      pz("Frango com Milho", "Frango desfiado coberto com milho e com mussarela.", 40, "frango-catupiry"),
+      pz("Frango com Bacon (Especial da Casa)", "Frango desfiado coberto com mussarela e/ou requeijão, intercalado com bacon fatiado.", 42, "bacon-cebola"),
+      pz("Fim de Noite a Pizza (Especial da Casa)", "Brócolis, milho, calabresa fatiada, mussarela, cheddar, requeijão cremoso, bacon, tomate e cebola.", 42, "moda-da-casa"),
+      pz("Glutão (Especial da Casa)", "Lombo fresco recheado com presunto, salame, bacon, pimentões e coberto com mussarela.", 42, "portuguesa", { soldOut: true }),
+      pz("Imperial (Especial da Casa)", "Calabresa fatiada, milho, ovos, bacon, tomate e cebola.", 40, "portuguesa"),
+      pz("Lombinho ao Alho", "Lombo canadense ao alho frito, coberto com provolone gratinado e parmesão fresco ralado.", 40, "borda-recheada"),
+      pz("Lombinho com Requeijão", "Lombo canadense com requeijão catupiry e parmesão ralado.", 40, "quatro-queijos"),
+      pz("Lombinho com Catupiry", "Lombinho com catupiry original (duro).", 42, "quatro-queijos"),
+      pz("Lombo Fresco 2 (Tradicional da Casa)", "Lombo fresco recheado com calabresa, coberto com mussarela.", 40, "portuguesa", { soldOut: true }),
+      pz("Mussarela", "Queijo mussarela e orégano.", 40, "mussarela"),
+      pz("Marguerita", "Mussarela, rodelas de tomate e manjericão.", 40, "margherita"),
+      pz("Milho Verde", "Mussarela, milho, rodelas de tomate e manjericão.", 40, "margherita"),
+      pz("Napolitana", "Mussarela, molho, rodelas de tomate e queijo parmesão ralado.", 40, "napolitana"),
+      pz("Portuguesa (Tradicional da PSP)", "Presunto, ovos, cebola, mussarela e rodelas de tomate.", 40, "portuguesa"),
+      pz("Portuguesa Especial (Especial da Casa)", "Peito de peru defumado, ovos, cebola, requeijão cremoso e mussarela.", 42, "portuguesa"),
+      pz("Peito de Peru (Especial da Casa)", "Peito de peru defumado com requeijão cremoso e cereja. Obs.: pizza agridoce!", 43, "cta-pizza"),
+      pz("Pepperoni (Especial da Casa)", "Delicioso pepperoni artesanal com queijo derretido em massa crocante, um clássico irresistível.", 42, "pepperoni", { best: true }),
+      pz("Paulista (Especial da Casa)", "Lombinho canadense, cebola, requeijão e provolone.", 42, "cta-pizza"),
+      pz("Palmito (Especial da Casa)", "Palmito em rodelas ou em filetes, coberto com requeijão, cheddar, mussarela ou queijo provolone.", 45, "mussarela"),
+      pz("Salame Italiano", "Salame tipo italiano com mussarela ou requeijão.", 42, "pepperoni"),
+      pz("Toscana (Especial da Casa)", "Mussarela com linguiça toscana, parmesão e cebola.", 40, "toscana"),
+      pz("4 Queijos (Especial da Casa)", "Mussarela, requeijão, parmesão e provolone.", 40, "quatro-queijos"),
+      pz("5 Queijos (Especial da Casa)", "Mussarela, requeijão, parmesão.", 42, "quatro-queijos"),
+      pz("6 Queijos (Especial da Casa)", "Mussarela, requeijão, parmesão, gorgonzola, cheddar e provolone.", 42, "quatro-queijos", { soldOut: true }),
     ],
   },
   {
-    name: "Pizzas Especiais",
-    image: "/img/sao-paulo-especial.webp",
-    products: [
-      {
-        name: "São Paulo",
-        description: "A assinatura da casa: búfala, rúcula, burrata e parmesão.",
-        ingredients: ["Molho de tomate", "Mussarela de búfala", "Rúcula", "Burrata", "Parmesão", "Azeite"],
-        image: "/img/sao-paulo-especial.webp",
-        sizes: pizzaSizes(42.9, 54.9, 66.9, 79.9),
-        best: true,
-        isNew: true,
-      },
-      {
-        name: "Quatro Queijos",
-        description: "Mussarela, provolone, parmesão e catupiry. Puxa-puxa garantido.",
-        ingredients: ["Mussarela", "Provolone", "Parmesão", "Catupiry"],
-        image: "/img/quatro-queijos.webp",
-        sizes: pizzaSizes(38.9, 48.9, 54.9, 72.9, 62.9),
-        promo: true,
-      },
-      {
-        name: "Rúcula com Tomate Seco",
-        description: "Rúcula fresca, tomate seco e mussarela de búfala.",
-        ingredients: ["Molho de tomate", "Mussarela de búfala", "Rúcula", "Tomate seco", "Parmesão"],
-        image: "/img/rucula-tomate-seco.webp",
-        sizes: pizzaSizes(39.9, 49.9, 59.9, 72.9),
-      },
-      {
-        name: "Napolitana",
-        description: "Tomate, parmesão e manjericão sobre mussarela.",
-        ingredients: ["Molho de tomate", "Mussarela", "Tomate", "Parmesão", "Manjericão"],
-        image: "/img/napolitana.webp",
-        sizes: pizzaSizes(36.9, 46.9, 56.9, 69.9),
-      },
-      {
-        name: "Toscana",
-        description: "Calabresa artesanal, tomate cereja, manjericão e azeitona preta.",
-        ingredients: ["Molho de tomate", "Mussarela", "Calabresa artesanal", "Tomate cereja", "Manjericão", "Azeitona preta"],
-        image: "/img/toscana.webp",
-        sizes: pizzaSizes(39.9, 49.9, 59.9, 72.9),
-      },
-      {
-        name: "Moda da Casa",
-        description: "Presunto, pimentão, milho, azeitona e catupiry.",
-        ingredients: ["Molho de tomate", "Mussarela", "Presunto", "Pimentão", "Milho", "Azeitona", "Catupiry"],
-        image: "/img/moda-da-casa.webp",
-        sizes: pizzaSizes(38.9, 48.9, 58.9, 71.9),
-      },
-    ],
-  },
-  {
-    name: "Pizzas Doces",
-    image: "/img/doce-morango.webp",
-    products: [
-      {
-        name: "Chocolate com Morango",
-        description: "Chocolate ao leite cremoso com morangos frescos.",
-        ingredients: ["Chocolate ao leite", "Morango", "Leite condensado"],
-        image: "/img/doce-morango.webp",
-        sizes: pizzaSizes(34.9, 44.9, 54.9, 66.9),
-        addons: SWEET_ADDONS,
-      },
-      {
-        name: "Brigadeiro",
-        description: "Chocolate, brigadeiro de colher e granulado.",
-        ingredients: ["Chocolate", "Brigadeiro", "Granulado"],
-        image: "/img/doce-chocolate.webp",
-        sizes: pizzaSizes(32.9, 42.9, 52.9, 64.9),
-        addons: SWEET_ADDONS,
-      },
-    ],
-  },
-  {
-    name: "Combos",
-    image: "/img/combo-familia.webp",
-    products: [
-      {
-        name: "Combo Família",
-        description: "2 pizzas grandes tradicionais + refrigerante 2 litros.",
-        ingredients: ["2 pizzas grandes", "Refrigerante 2L"],
-        image: "/img/combo-familia.webp",
-        sizes: single(109.9, 129.9),
-        addons: [],
-        promo: true,
-        best: true,
-      },
-      {
-        name: "Combo Casal",
-        description: "1 pizza grande tradicional + refrigerante 1 litro.",
-        ingredients: ["1 pizza grande", "Refrigerante 1L"],
-        image: "/img/combo-casal.webp",
-        sizes: single(59.9, 69.9),
-        addons: [],
-        promo: true,
-      },
-      {
-        name: "Combo Noite de Jogo",
-        description: "1 pizza família + borda recheada + refrigerante 2 litros.",
-        ingredients: ["1 pizza família", "Borda recheada", "Refrigerante 2L"],
-        image: "/img/pepperoni-box.webp",
-        sizes: single(89.9),
-        addons: [],
-        isNew: true,
-      },
-    ],
+    name: "Esfiha Aberta",
+    image: "/img/esfiha.webp",
+    products: [{ name: "Esfiha", description: "Esfiha tipo Habib's.", image: "/img/esfiha.webp", sizes: single(5) }],
   },
   {
     name: "Bebidas",
-    image: "/img/refrigerante.webp",
+    image: "/img/bebida-guarana.webp",
     products: [
-      {
-        name: "Refrigerante lata 350ml",
-        description: "Gelado. Consulte os sabores disponíveis.",
-        ingredients: [],
-        image: "/img/refri-lata.webp",
-        sizes: single(6),
-        addons: [],
-      },
-      {
-        name: "Refrigerante 2 litros",
-        description: "Perfeito para dividir.",
-        ingredients: [],
-        image: "/img/refrigerante.webp",
-        sizes: single(14),
-        addons: [],
-      },
-      {
-        name: "Suco natural de laranja",
-        description: "500ml, feito na hora.",
-        ingredients: [],
-        image: "/img/suco-laranja.webp",
-        sizes: single(9),
-        addons: [],
-      },
-      {
-        name: "Limonada suíça",
-        description: "500ml, cremosa e refrescante.",
-        ingredients: [],
-        image: "/img/limonada.webp",
-        sizes: single(10),
-        addons: [],
-      },
-      {
-        name: "Suco de morango",
-        description: "500ml, com fruta de verdade.",
-        ingredients: [],
-        image: "/img/suco-morango.webp",
-        sizes: single(10),
-        addons: [],
-      },
-    ],
-  },
-  {
-    name: "Adicionais",
-    image: "/img/borda-recheada.webp",
-    products: [
-      {
-        name: "Borda recheada",
-        description: "Catupiry ou cheddar — informe nas observações.",
-        ingredients: [],
-        image: "/img/borda-recheada.webp",
-        sizes: single(10),
-        addons: [],
-      },
+      drink("Água mineral", 2, "bebida-agua"),
+      drink("Bohemia lata", 4, "bebida-bohemia", { soldOut: true }),
+      drink("Brahma lata", 4, "bebida-brahma"),
+      drink("Skol lata", 4, "bebida-skol"),
+      drink("Original lata", 5, "bebida-original"),
+      drink("Soda limão", 7, "bebida-soda"),
+      drink("Sukita laranja", 7, "bebida-sukita"),
+      drink("Guaraná litro", 7, "bebida-guarana"),
+      drink("Pepsi litro", 7, "bebida-pepsi"),
     ],
   },
 ];
+
+/** Versão do cardápio inicial: ao mudar, bancos já criados recebem o cardápio novo. */
+const CATALOG_VERSION = "2";
+
+async function insertCatalog(db: Db) {
+  for (const [ci, cat] of CATALOG.entries()) {
+    const [c] = await db.query<{ id: number }>("INSERT INTO categories (name, image, sort, active) VALUES ($1, $2, $3, TRUE) RETURNING id", [cat.name, cat.image, ci]);
+    const rows = cat.products.map((p, pi) => ({
+      category_id: c.id,
+      name: p.name,
+      description: p.description,
+      ingredients: [],
+      image: p.image,
+      sizes: p.sizes,
+      addons: [],
+      active: !p.soldOut,
+      is_best: !!p.best,
+      sort: pi,
+    }));
+    await db.query(
+      `INSERT INTO products (category_id, name, description, ingredients, image, sizes, addons, active, is_promo, is_best, is_new, sort)
+       SELECT category_id, name, description, ingredients, image, sizes, addons, active, FALSE, is_best, FALSE, sort
+       FROM jsonb_to_recordset($1::text::jsonb) AS x(category_id int, name text, description text, ingredients jsonb, image text,
+         sizes jsonb, addons jsonb, active boolean, is_best boolean, sort int)`,
+      [JSON.stringify(rows)]
+    );
+  }
+}
+
 
 /** Gerador pseudoaleatório determinístico para os dados de demonstração. */
 function rng(seed: number) {
@@ -324,7 +198,7 @@ async function seedDemoOrders(db: Db) {
       "SELECT p.id, p.name, p.sizes, p.ingredients, c.name AS category FROM products p JOIN categories c ON c.id = p.category_id"
     )
   ).map((p) => ({ ...p, sizes: json<Size[]>(p.sizes, []), ingredients: json<string[]>(p.ingredients, []) }));
-  const pizzas = products.filter((p) => p.category.startsWith("Pizza") || p.category === "Combos");
+  const pizzas = products.filter((p) => p.category === "Pizzas");
   const drinks = products.filter((p) => p.category === "Bebidas");
   const payments = ["Pix", "Pix", "Pix", "Dinheiro", "Cartão de crédito", "Cartão de débito"];
   const origins = ["site", "site", "site", "site", "telefone", "balcao"];
@@ -432,9 +306,33 @@ async function seedDemoOrders(db: Db) {
   await db.query("SELECT setval('order_number_seq', GREATEST((SELECT COALESCE(MAX(number), 1000) FROM orders), 1000))");
 }
 
+/**
+ * Banco já existente com cardápio de versão anterior: troca categorias e produtos pelo cardápio atual.
+ * Pedidos reais são mantidos (os itens guardam nome e preço); os de demonstração são refeitos.
+ */
+async function ensureCatalog(root: Db) {
+  const [v] = await root.query<{ value: string }>("SELECT value FROM meta WHERE key = 'catalog_version'");
+  if (v?.value === CATALOG_VERSION) return;
+  await root.tx(async (db) => {
+    await db.query("SELECT pg_advisory_xact_lock(424243)");
+    const [again] = await db.query<{ value: string }>("SELECT value FROM meta WHERE key = 'catalog_version'");
+    if (again?.value === CATALOG_VERSION) return;
+    const [{ n: demo }] = await db.query<{ n: number }>("SELECT COUNT(*)::int AS n FROM orders WHERE is_demo");
+    await db.query("DELETE FROM orders WHERE is_demo");
+    await db.query("DELETE FROM products");
+    await db.query("DELETE FROM categories");
+    await insertCatalog(db);
+    if (demo > 0) {
+      const [{ n: real }] = await db.query<{ n: number }>("SELECT COUNT(*)::int AS n FROM orders");
+      if (real === 0) await seedDemoOrders(db);
+    }
+    await db.query("INSERT INTO meta (key, value) VALUES ('catalog_version', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", [CATALOG_VERSION]);
+  });
+}
+
 export async function ensureSeed(root: Db) {
   const done = await root.query("SELECT value FROM meta WHERE key = 'seeded'");
-  if (done.length) return;
+  if (done.length) return ensureCatalog(root);
   await root.tx(async (db) => {
     // Trava para duas instâncias não semearem ao mesmo tempo.
     await db.query("SELECT pg_advisory_xact_lock(424242)");
@@ -453,29 +351,8 @@ export async function ensureSeed(root: Db) {
       hashPassword(password),
     ]);
 
-    for (const [ci, cat] of CATALOG.entries()) {
-      const [c] = await db.query<{ id: number }>("INSERT INTO categories (name, image, sort, active) VALUES ($1, $2, $3, TRUE) RETURNING id", [cat.name, cat.image, ci]);
-      const rows = cat.products.map((p, pi) => ({
-        category_id: c.id,
-        name: p.name,
-        description: p.description,
-        ingredients: p.ingredients,
-        image: p.image,
-        sizes: p.sizes,
-        addons: p.addons ?? PIZZA_ADDONS,
-        is_promo: !!p.promo,
-        is_best: !!p.best,
-        is_new: !!p.isNew,
-        sort: pi,
-      }));
-      await db.query(
-        `INSERT INTO products (category_id, name, description, ingredients, image, sizes, addons, active, is_promo, is_best, is_new, sort)
-         SELECT category_id, name, description, ingredients, image, sizes, addons, TRUE, is_promo, is_best, is_new, sort
-         FROM jsonb_to_recordset($1::text::jsonb) AS x(category_id int, name text, description text, ingredients jsonb, image text,
-           sizes jsonb, addons jsonb, is_promo boolean, is_best boolean, is_new boolean, sort int)`,
-        [JSON.stringify(rows)]
-      );
-    }
+    await insertCatalog(db);
+    await db.query("INSERT INTO meta (key, value) VALUES ('catalog_version', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", [CATALOG_VERSION]);
 
     if (process.env.SEED_DEMO_ORDERS !== "false") await seedDemoOrders(db);
     await db.query("INSERT INTO meta (key, value) VALUES ('seeded', $1)", [new Date().toISOString()]);

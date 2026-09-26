@@ -18,7 +18,12 @@ const DEFAULT_ADDONS: Addon[] = [
   { name: "Borda recheada de catupiry", price: 1000 },
   { name: "Borda recheada de cheddar", price: 1000 },
 ];
-const PIZZA_SIZES = ["Pequena", "Média", "Grande", "Família"];
+/** Tamanhos padrão de pizza: Pequena até 2 sabores, Média e Grande até 3. */
+const PIZZA_SIZES = [
+  { name: "Pequena", flavors: "2" },
+  { name: "Média", flavors: "3" },
+  { name: "Grande", flavors: "3" },
+];
 
 export function MenuManager() {
   const toast = useToast();
@@ -306,7 +311,7 @@ export function ImageUpload({ value, onChange, kind = "product", className = "" 
   );
 }
 
-type SizeRow = { name: string; price: string; oldPrice: string };
+type SizeRow = { name: string; price: string; oldPrice: string; flavors: string };
 type AddonRow = { name: string; price: string };
 
 function ProductForm({
@@ -331,7 +336,9 @@ function ProductForm({
   const [ingInput, setIngInput] = useState("");
   const [image, setImage] = useState<string | null>(product?.image ?? null);
   const [sizes, setSizes] = useState<SizeRow[]>(
-    product?.sizes.map((s) => ({ name: s.name, price: centsToInput(s.price), oldPrice: centsToInput(s.oldPrice ?? null) })) ?? [{ name: "Único", price: "", oldPrice: "" }]
+    product?.sizes.map((s) => ({ name: s.name, price: centsToInput(s.price), oldPrice: centsToInput(s.oldPrice ?? null), flavors: String(s.flavors ?? 1) })) ?? [
+      { name: "Único", price: "", oldPrice: "", flavors: "1" },
+    ]
   );
   const [addons, setAddons] = useState<AddonRow[]>(product?.addons.map((a) => ({ name: a.name, price: centsToInput(a.price) })) ?? []);
   const [cost, setCost] = useState(product?.costPercent != null ? String(product.costPercent) : "");
@@ -354,7 +361,12 @@ function ProductForm({
       description: description.trim(),
       ingredients,
       image,
-      sizes: sizes.map((s) => ({ name: s.name.trim() || "Único", price: parseMoney(s.price), oldPrice: s.oldPrice ? parseMoney(s.oldPrice) : null })),
+      sizes: sizes.map((s) => ({
+        name: s.name.trim() || "Único",
+        price: parseMoney(s.price),
+        oldPrice: s.oldPrice ? parseMoney(s.oldPrice) : null,
+        flavors: Math.min(4, Math.max(1, Number(s.flavors) || 1)),
+      })),
       addons: addons.filter((a) => a.name.trim()).map((a) => ({ name: a.name.trim(), price: parseMoney(a.price) })),
       costPercent: cost.trim() ? Number(cost.replace(",", ".")) : null,
       ...flags,
@@ -468,25 +480,35 @@ function ProductForm({
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-ink-600">Preços</span>
               <div className="flex gap-1.5">
-                <Button size="sm" variant={multi ? "ghost" : "primary"} onClick={() => setSizes([{ name: "Único", price: sizes[0]?.price ?? "", oldPrice: "" }])}>
+                <Button size="sm" variant={multi ? "ghost" : "primary"} onClick={() => setSizes([{ name: "Único", price: sizes[0]?.price ?? "", oldPrice: "", flavors: "1" }])}>
                   Preço único
                 </Button>
-                <Button size="sm" variant={multi ? "primary" : "ghost"} onClick={() => !multi && setSizes(PIZZA_SIZES.map((n) => ({ name: n, price: "", oldPrice: "" })))}>
+                <Button size="sm" variant={multi ? "primary" : "ghost"} onClick={() => !multi && setSizes(PIZZA_SIZES.map((z) => ({ name: z.name, price: "", oldPrice: "", flavors: z.flavors })))}>
                   Por tamanho
                 </Button>
               </div>
             </div>
             <div className="space-y-2 rounded-2xl border border-cream-200 p-3">
-              <div className={`grid gap-2 ${small} ${multi ? "grid-cols-[1fr_100px_100px_36px]" : "grid-cols-[100px_100px]"}`}>
+              <div className={`grid gap-2 ${small} ${multi ? "grid-cols-[1fr_90px_90px_70px_36px]" : "grid-cols-[100px_100px]"}`}>
                 {multi && <span>Tamanho</span>}
                 <span>Preço (R$)</span>
                 <span title="Aparece riscado na loja">De (riscado)</span>
+                {multi && <span title="Quantos sabores o cliente pode escolher nesse tamanho">Sabores</span>}
               </div>
               {sizes.map((s, i) => (
-                <div key={i} className={`grid items-center gap-2 ${multi ? "grid-cols-[1fr_100px_100px_36px]" : "grid-cols-[100px_100px]"}`}>
+                <div key={i} className={`grid items-center gap-2 ${multi ? "grid-cols-[1fr_90px_90px_70px_36px]" : "grid-cols-[100px_100px]"}`}>
                   {multi && <input className={inputCls} value={s.name} onChange={(e) => setSizes((c) => c.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)))} aria-label="Nome do tamanho" />}
                   <input className={inputCls} inputMode="decimal" placeholder="0,00" value={s.price} onChange={(e) => setSizes((c) => c.map((x, k) => (k === i ? { ...x, price: e.target.value } : x)))} aria-label="Preço" />
                   <input className={inputCls} inputMode="decimal" placeholder="—" value={s.oldPrice} onChange={(e) => setSizes((c) => c.map((x, k) => (k === i ? { ...x, oldPrice: e.target.value } : x)))} aria-label="Preço antigo" />
+                  {multi && (
+                    <select className={inputCls} value={s.flavors} onChange={(e) => setSizes((c) => c.map((x, k) => (k === i ? { ...x, flavors: e.target.value } : x)))} aria-label="Quantidade de sabores">
+                      {["1", "2", "3", "4"].map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   {multi && (
                     <IconBtn label="Remover tamanho" onClick={() => setSizes((c) => (c.length > 1 ? c.filter((_, k) => k !== i) : c))} danger>
                       <Trash2 className="h-4 w-4" />
@@ -495,7 +517,7 @@ function ProductForm({
                 </div>
               ))}
               {multi && (
-                <Button size="sm" variant="ghost" onClick={() => setSizes((c) => [...c, { name: "", price: "", oldPrice: "" }])}>
+                <Button size="sm" variant="ghost" onClick={() => setSizes((c) => [...c, { name: "", price: "", oldPrice: "", flavors: "1" }])}>
                   <Plus className="h-3.5 w-3.5" /> Tamanho
                 </Button>
               )}
