@@ -59,7 +59,7 @@ export function About() {
         <motion.div initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }} className="relative">
           <div className="relative aspect-[4/3] overflow-hidden rounded-[32px] border border-white/10">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/img/cta-pizza.webp" alt="Pizza saindo do forno" loading="lazy" className="h-full w-full object-cover" />
+            <img src={settings.aboutImage} alt="Pizza saindo do forno" loading="lazy" className="h-full w-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-ink-950/80 to-transparent" />
           </div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -108,11 +108,12 @@ export function About() {
 }
 
 export function FinalCta() {
+  const { settings } = useStore();
   return (
     <section className="grain relative overflow-hidden bg-gradient-to-br from-[#3a0f06] via-[#1a0805] to-ink-950 py-20 sm:py-28">
       <div className="absolute -right-[20vw] top-1/2 aspect-square w-[70vw] max-w-[760px] -translate-y-1/2 opacity-90 max-sm:-right-[35vw] max-sm:w-[95vw] max-sm:opacity-40">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/img/hero-pizza.webp" alt="" loading="lazy" className="h-full w-full animate-spin-slow drop-shadow-[0_40px_60px_rgba(0,0,0,.7)]" />
+        <img src={settings.heroImage} alt="" loading="lazy" className="h-full w-full animate-spin-slow drop-shadow-[0_40px_60px_rgba(0,0,0,.7)]" />
       </div>
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6">
         <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }} className="max-w-xl">

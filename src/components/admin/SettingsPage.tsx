@@ -2,12 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Save, Trash2 } from "lucide-react";
+import { Plus, Printer, QrCode, Save, Trash2 } from "lucide-react";
 import { ImageUpload } from "./MenuManager";
 import { Button, Card, Field, Modal, PageHeader, Skeleton, Toggle, api, compactCls, inputCls, useFetch, useToast } from "./ui";
 import { centsToInput, parseMoney, slugify } from "@/lib/format";
 import { buildOrderMessage } from "@/lib/whatsapp";
 import { WEEKDAYS, type AdminUser, type Order, type Settings } from "@/lib/types";
+
+type PrintLast = { ok: boolean; status?: number; error?: string; event: string; order?: number; at: string };
+const EVENT_LABEL: Record<string, string> = { pedido_novo: "pedido do site", nova_venda: "nova venda", reimpressao: "reimpressão", teste: "teste" };
 
 const SAMPLE: Order = {
   id: 0,
@@ -15,6 +18,7 @@ const SAMPLE: Order = {
   customerName: "João Silva",
   phone: "(74) 99999-9999",
   deliveryType: "delivery",
+  tableNumber: null,
   address: { street: "Rua Principal", number: "10", district: "Centro", complement: "Casa", reference: "Perto da praça", city: "Piritiba - BA" },
   payment: "Dinheiro",
   changeFor: 10000,
@@ -32,7 +36,8 @@ const SAMPLE: Order = {
 
 export function SettingsPage({ me }: { me: AdminUser }) {
   const toast = useToast();
-  const { data, loading } = useFetch<{ settings: Settings }>("/api/admin/settings");
+  const { data, loading, reload } = useFetch<{ settings: Settings; printLast: PrintLast | null }>("/api/admin/settings");
+  const [testing, setTesting] = useState(false);
   const [s, setS] = useState<Settings | null>(null);
   const [fee, setFee] = useState("");
   const [minOrder, setMinOrder] = useState("");
@@ -112,6 +117,30 @@ export function SettingsPage({ me }: { me: AdminUser }) {
             <div className="space-y-3">
               {text("storeName", "Nome da pizzaria")}
               {text("tagline", "Frase do topo do site", { placeholder: "Feita para ser lembrada" })}
+            </div>
+          </div>
+        </Card>
+
+        <Card title="Imagens do site">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-ink-600">Pizza da abertura</span>
+              <ImageUpload kind="hero" value={s.heroImage} onChange={(v) => set("heroImage", v ?? "/img/hero-pizza.webp")} className="aspect-square bg-ink-950" />
+              <p className="mt-1.5 text-xs text-ink-500">Use uma pizza inteira vista de cima, sobre fundo escuro. O recorte redondo é automático.</p>
+              {s.heroImage !== "/img/hero-pizza.webp" && (
+                <button onClick={() => set("heroImage", "/img/hero-pizza.webp")} className="mt-1 text-xs font-bold text-gold-700 hover:underline">
+                  Voltar para a imagem padrão
+                </button>
+              )}
+            </div>
+            <div>
+              <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-ink-600">Foto do “Sobre nós”</span>
+              <ImageUpload value={s.aboutImage} onChange={(v) => set("aboutImage", v ?? "/img/sobre.webp")} className="aspect-[4/3]" />
+              {s.aboutImage !== "/img/sobre.webp" && (
+                <button onClick={() => set("aboutImage", "/img/sobre.webp")} className="mt-1 text-xs font-bold text-gold-700 hover:underline">
+                  Voltar para a imagem padrão
+                </button>
+              )}
             </div>
           </div>
         </Card>
@@ -196,6 +225,84 @@ export function SettingsPage({ me }: { me: AdminUser }) {
           >
             <Plus className="h-3.5 w-3.5" /> Adicionar método
           </Button>
+        </Card>
+
+        <Card title="Mesas (pedido pelo cardápio na mesa)">
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-cream-200 p-3.5">
+            <div>
+              <p className="font-bold">Permitir pedido na mesa</p>
+              <p className="text-xs text-ink-500">O cliente escolhe a opção “Mesa” e o número no checkout. O pedido vai direto para Pedidos e para a maquininha.</p>
+            </div>
+            <Toggle checked={s.tablesEnabled} onChange={(v) => set("tablesEnabled", v)} label="Permitir pedido na mesa" />
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-[160px_1fr] sm:items-end">
+            <Field label="Quantidade de mesas">
+              <input
+                className={inputCls}
+                inputMode="numeric"
+                value={s.tableCount}
+                onChange={(e) => set("tableCount", Math.min(300, Math.max(1, Number(e.target.value.replace(/\D/g, "")) || 1)))}
+              />
+            </Field>
+            <a href="/admin/mesas" target="_blank" className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-cream-200 bg-white px-4 text-sm font-bold text-ink-800 hover:bg-cream-100">
+              <QrCode className="h-4 w-4" /> Imprimir QR Codes das mesas
+            </a>
+          </div>
+          <p className="mt-2 text-xs text-ink-500">Cada QR Code abre o cardápio já com a mesa escolhida. Salve antes de imprimir se mudou a quantidade.</p>
+        </Card>
+
+        <Card title="Impressão na maquininha">
+          <p className="-mt-2 mb-3 text-xs text-ink-500">
+            O sistema envia cada pedido (com o mesmo texto do WhatsApp) para o endereço abaixo, que a maquininha/impressora usa para imprimir. Funciona com o webhook do
+            aplicativo da maquininha ou com uma automação (ex.: n8n).
+          </p>
+          <div className="space-y-3">
+            <Field label="Endereço do webhook (https://)">
+              <input className={inputCls} value={s.printWebhookUrl} onChange={(e) => set("printWebhookUrl", e.target.value.trim())} placeholder="https://…" inputMode="url" />
+            </Field>
+            <Field label="Token / chave (opcional)" hint="Vai no cabeçalho Authorization: Bearer e assina o envio (X-Pizzaria-Assinatura).">
+              <input className={inputCls} type="password" autoComplete="off" value={s.printWebhookToken} onChange={(e) => set("printWebhookToken", e.target.value)} />
+            </Field>
+            <div className="space-y-2 rounded-2xl border border-cream-200 p-3.5">
+              <div className="flex items-center justify-between gap-3 text-sm font-semibold">
+                Imprimir automaticamente pedidos do site
+                <Toggle checked={s.printOnSiteOrder} onChange={(v) => set("printOnSiteOrder", v)} label="Imprimir pedidos do site" />
+              </div>
+              <div className="flex items-center justify-between gap-3 text-sm font-semibold">
+                Imprimir automaticamente ao registrar uma nova venda
+                <Toggle checked={s.printOnNewSale} onChange={(v) => set("printOnNewSale", v)} label="Imprimir novas vendas" />
+              </div>
+              <p className="text-xs text-ink-500">Em Pedidos, o botão “Imprimir” reenvia qualquer pedido.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="ghost"
+                disabled={testing || !s.printWebhookUrl}
+                onClick={async () => {
+                  if (dirty) return toast("Salve as configurações antes de testar.", "error");
+                  setTesting(true);
+                  try {
+                    await api("/api/admin/print-test", { method: "POST" });
+                    toast("Teste enviado — confira a maquininha");
+                  } catch (e) {
+                    toast(e instanceof Error ? e.message : "Falha no teste", "error");
+                  } finally {
+                    setTesting(false);
+                    reload();
+                  }
+                }}
+              >
+                <Printer className="h-4 w-4" /> {testing ? "Enviando…" : "Enviar teste"}
+              </Button>
+              {data?.printLast && (
+                <span className={`text-xs font-semibold ${data.printLast.ok ? "text-emerald-700" : "text-red-600"}`}>
+                  Último envio ({EVENT_LABEL[data.printLast.event] ?? data.printLast.event}
+                  {data.printLast.order ? ` nº ${data.printLast.order}` : ""}, {new Date(data.printLast.at).toLocaleString("pt-BR")}):{" "}
+                  {data.printLast.ok ? "recebido ✓" : data.printLast.error}
+                </span>
+              )}
+            </div>
+          </div>
         </Card>
 
         <Card title="Mensagem do WhatsApp" className="xl:col-span-2">

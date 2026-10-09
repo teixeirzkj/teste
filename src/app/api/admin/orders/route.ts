@@ -1,6 +1,9 @@
+import { after } from "next/server";
 import { handle, ok, readJson } from "@/lib/server/api";
 import { requireAdmin } from "@/lib/server/auth";
+import { getSettings } from "@/lib/server/catalog";
 import { adminOrderSchema, createOrder, listBoardOrders, listOrders } from "@/lib/server/orders";
+import { sendToPrinter } from "@/lib/server/printer";
 import { addDays, dayStartISO, resolvePeriod, type PeriodPreset } from "@/lib/time";
 
 const PRESETS: PeriodPreset[] = ["today", "7d", "30d", "month", "lastMonth", "custom"];
@@ -17,7 +20,7 @@ export const GET = handle(async (req: Request) => {
   return ok({ orders, range: { from, to } });
 });
 
-/** Nova venda registrada manualmente no painel (balcão/telefone). */
+/** Nova venda registrada manualmente no painel (balcão/telefone/mesa). */
 export const POST = handle(async (req: Request) => {
   await requireAdmin();
   const input = await readJson(req, adminOrderSchema);
@@ -25,5 +28,7 @@ export const POST = handle(async (req: Request) => {
     { ...input, phone: input.phone || "" },
     { origin: input.origin, status: input.status, enforceStore: false, deliveryFeeOverride: input.deliveryFee }
   );
+  const settings = await getSettings();
+  if (settings.printOnNewSale && settings.printWebhookUrl) after(() => sendToPrinter(order, settings, "nova_venda"));
   return ok({ order }, { status: 201 });
 });

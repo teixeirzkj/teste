@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bike, Check, ChevronDown, Clock, Copy, MapPin, MessageCircle, Phone, Search, Store, X } from "lucide-react";
+import { Bike, Check, ChevronDown, Clock, Copy, MapPin, MessageCircle, Phone, Printer, Search, Store, UtensilsCrossed, X } from "lucide-react";
 import { Button, Empty, Modal, PageHeader, Skeleton, api, inputCls, useToast } from "./ui";
 import { mapsLink, money, waLink } from "@/lib/format";
 import { formatTime, timeAgo } from "@/lib/time";
@@ -57,6 +57,15 @@ export function OrdersBoard() {
     } catch (e) {
       setOrders(prev);
       toast(e instanceof Error ? e.message : "Erro", "error");
+    }
+  };
+
+  const print = async (o: Order) => {
+    try {
+      await api(`/api/admin/orders/${o.id}/print`, { method: "POST" });
+      toast(`Pedido nº ${o.number} enviado para a maquininha`);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erro ao imprimir", "error");
     }
   };
 
@@ -116,7 +125,7 @@ export function OrdersBoard() {
                 <div className="space-y-2.5 lg:max-h-[calc(100dvh-230px)] lg:overflow-y-auto lg:pr-0.5">
                   <AnimatePresence initial={false}>
                     {list.map((o) => (
-                      <OrderCard key={o.id} o={o} now={now} ring={c.ring} onMove={move} onAddress={() => setAddr(o)} />
+                      <OrderCard key={o.id} o={o} now={now} ring={c.ring} onMove={move} onPrint={print} onAddress={() => setAddr(o)} />
                     ))}
                   </AnimatePresence>
                   {!list.length && <Empty>Nenhum pedido aqui.</Empty>}
@@ -132,11 +141,27 @@ export function OrdersBoard() {
   );
 }
 
-function OrderCard({ o, now, ring, onMove, onAddress }: { o: Order; now: number; ring: string; onMove: (o: Order, s: OrderStatus) => void; onAddress: () => void }) {
+function OrderCard({
+  o,
+  now,
+  ring,
+  onMove,
+  onPrint,
+  onAddress,
+}: {
+  o: Order;
+  now: number;
+  ring: string;
+  onMove: (o: Order, s: OrderStatus) => void;
+  onPrint: (o: Order) => Promise<void>;
+  onAddress: () => void;
+}) {
+  const [printing, setPrinting] = useState(false);
   const [open, setOpen] = useState(false);
   const items = o.items.reduce((s, i) => s + i.qty, 0);
   const fresh = o.status === "pending" && now - Date.parse(o.createdAt) < 5 * 60000;
   const delivery = o.deliveryType === "delivery";
+  const table = o.deliveryType === "table";
 
   return (
     <motion.article
@@ -165,10 +190,16 @@ function OrderCard({ o, now, ring, onMove, onAddress }: { o: Order; now: number;
           <span className="rounded-md bg-cream-100 px-1.5 py-0.5 text-ink-600">
             {items} {items === 1 ? "item" : "itens"}
           </span>
-          <span className="inline-flex items-center gap-1 rounded-md bg-cream-100 px-1.5 py-0.5 text-ink-600">
-            {delivery ? <Bike className="h-3 w-3" /> : <Store className="h-3 w-3" />}
-            {delivery ? "Entrega" : "Retirada"}
-          </span>
+          {table ? (
+            <span className="inline-flex items-center gap-1 rounded-md bg-ink-950 px-2 py-0.5 text-gold-300">
+              <UtensilsCrossed className="h-3 w-3" /> MESA {o.tableNumber}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-md bg-cream-100 px-1.5 py-0.5 text-ink-600">
+              {delivery ? <Bike className="h-3 w-3" /> : <Store className="h-3 w-3" />}
+              {delivery ? "Entrega" : "Retirada"}
+            </span>
+          )}
           <span className="rounded-md bg-cream-100 px-1.5 py-0.5 text-ink-600">{ORIGIN_LABEL[o.origin]}</span>
           {fresh && <span className="rounded-md bg-flame-500 px-1.5 py-0.5 text-white">NOVO</span>}
         </div>
@@ -224,6 +255,10 @@ function OrderCard({ o, now, ring, onMove, onAddress }: { o: Order; now: number;
                       <MapPin className="h-3.5 w-3.5" /> Ver endereço
                     </button>
                   </>
+                ) : table ? (
+                  <p className="inline-flex items-center gap-1.5 font-bold text-ink-950">
+                    <UtensilsCrossed className="h-3.5 w-3.5" /> Levar na mesa {o.tableNumber}
+                  </p>
                 ) : (
                   <p className="font-semibold text-ink-600">Cliente vai retirar no local.</p>
                 )}
@@ -242,7 +277,7 @@ function OrderCard({ o, now, ring, onMove, onAddress }: { o: Order; now: number;
                     </Button>
                   ) : (
                     <Button className="w-full whitespace-nowrap" onClick={() => onMove(o, "done")}>
-                      <Check className="h-4 w-4" /> Retirado — finalizar
+                      <Check className="h-4 w-4" /> {table ? "Servido — finalizar" : "Retirado — finalizar"}
                     </Button>
                   ))}
                 {o.status === "delivering" && (
@@ -250,11 +285,26 @@ function OrderCard({ o, now, ring, onMove, onAddress }: { o: Order; now: number;
                     <Check className="h-4 w-4" /> Finalizar pedido
                   </Button>
                 )}
-                {["pending", "preparing", "delivering"].includes(o.status) && (
-                  <Button variant="danger" size="sm" className="w-full" onClick={() => onMove(o, "canceled")}>
-                    <X className="h-3.5 w-3.5" /> Cancelar
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1"
+                    disabled={printing}
+                    onClick={async () => {
+                      setPrinting(true);
+                      await onPrint(o);
+                      setPrinting(false);
+                    }}
+                  >
+                    <Printer className="h-3.5 w-3.5" /> {printing ? "Enviando…" : "Imprimir"}
                   </Button>
-                )}
+                  {["pending", "preparing", "delivering"].includes(o.status) && (
+                    <Button variant="danger" size="sm" className="flex-1" onClick={() => onMove(o, "canceled")}>
+                      <X className="h-3.5 w-3.5" /> Cancelar
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </motion.div>

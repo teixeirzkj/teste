@@ -32,6 +32,7 @@ export function NewSale() {
   const [customer, setCustomer] = useState({ name: "", phone: "" });
   const [origin, setOrigin] = useState<OrderOrigin>("balcao");
   const [delivery, setDelivery] = useState<DeliveryType>("pickup");
+  const [tableNumber, setTableNumber] = useState("");
   const [addr, setAddr] = useState({ street: "", number: "", district: "", complement: "", reference: "", city: "" });
   const [fee, setFee] = useState<string | null>(null);
   const [payment, setPayment] = useState("");
@@ -81,6 +82,7 @@ export function NewSale() {
           customerName: customer.name.trim() || "Cliente balcão",
           phone: customer.phone,
           deliveryType: delivery,
+          tableNumber: delivery === "table" ? Number(tableNumber) || null : null,
           address: delivery === "delivery" ? addr : undefined,
           payment,
           changeFor: payObj?.allowChange && changeFor ? parseMoney(changeFor) : null,
@@ -232,8 +234,20 @@ export function NewSale() {
                 options={[
                   { v: "pickup", l: "Retirada / balcão" },
                   { v: "delivery", l: "Entrega" },
+                  { v: "table", l: "Mesa" },
                 ]}
               />
+              {delivery === "table" && (
+                <Field label="Número da mesa">
+                  <input
+                    className={inputCls}
+                    inputMode="numeric"
+                    value={tableNumber}
+                    onChange={(e) => setTableNumber(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                    placeholder={`1 a ${settings?.tableCount ?? 10}`}
+                  />
+                </Field>
+              )}
               <AnimatePresence initial={false}>
                 {delivery === "delivery" && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="space-y-2 overflow-hidden">

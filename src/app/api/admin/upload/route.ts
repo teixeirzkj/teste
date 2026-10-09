@@ -7,6 +7,7 @@ export const POST = handle(async (req: Request) => {
   const form = await req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) return fail(400, "Nenhuma imagem enviada.");
-  const kind = form.get("kind") === "logo" ? "logo" : "product";
+  const k = form.get("kind");
+  const kind = k === "logo" || k === "hero" ? k : "product";
   return ok({ url: await saveImage(file, kind) }, { status: 201 });
 });

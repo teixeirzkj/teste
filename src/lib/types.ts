@@ -43,6 +43,8 @@ export type Settings = {
   storeName: string;
   tagline: string;
   logo: string;
+  heroImage: string; // pizza redonda da abertura do site
+  aboutImage: string; // foto da seção "Sobre nós"
   phone: string;
   whatsapp: string;
   address: string;
@@ -62,6 +64,14 @@ export type Settings = {
   openMessage: string;
   closedMessage: string;
   defaultCostPercent: number;
+  /** Pedidos na mesa (cardápio digital dentro da pizzaria). */
+  tablesEnabled: boolean;
+  tableCount: number;
+  /** Impressão: endereço (webhook) que recebe o pedido para imprimir na maquininha. */
+  printWebhookUrl: string;
+  printWebhookToken: string;
+  printOnSiteOrder: boolean;
+  printOnNewSale: boolean;
 };
 
 export type Address = {
@@ -74,8 +84,8 @@ export type Address = {
 };
 
 export type OrderStatus = "pending" | "preparing" | "delivering" | "done" | "canceled";
-export type OrderOrigin = "site" | "balcao" | "telefone" | "whatsapp";
-export type DeliveryType = "delivery" | "pickup";
+export type OrderOrigin = "site" | "mesa" | "balcao" | "telefone" | "whatsapp";
+export type DeliveryType = "delivery" | "pickup" | "table";
 
 export type OrderItem = {
   id: number;
@@ -98,6 +108,7 @@ export type Order = {
   customerName: string;
   phone: string;
   deliveryType: DeliveryType;
+  tableNumber: number | null;
   address: Address;
   payment: string;
   changeFor: number | null;
@@ -136,6 +147,7 @@ export const ORIGIN_LABEL: Record<OrderOrigin, string> = {
   balcao: "Balcão",
   telefone: "Telefone",
   whatsapp: "WhatsApp",
+  mesa: "Mesa",
 };
 
 export const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];

@@ -65,7 +65,7 @@ export function SalesTable() {
 
   const exportCsv = () => {
     const head = ["Número", "Data", "Horário", "Cliente", "Telefone", "Valor", "Pagamento", "Status", "Origem", "Entrega"];
-    const lines = rows.map((o) => [o.number, formatDayKey(dayKey(o.createdAt), { day: "2-digit", month: "2-digit", year: "numeric" }), formatTime(o.createdAt), o.customerName, o.phone, (o.total / 100).toFixed(2).replace(".", ","), o.payment, STATUS_LABEL[o.status], ORIGIN_LABEL[o.origin], o.deliveryType === "delivery" ? "Entrega" : "Retirada"]);
+    const lines = rows.map((o) => [o.number, formatDayKey(dayKey(o.createdAt), { day: "2-digit", month: "2-digit", year: "numeric" }), formatTime(o.createdAt), o.customerName, o.phone, (o.total / 100).toFixed(2).replace(".", ","), o.payment, STATUS_LABEL[o.status], ORIGIN_LABEL[o.origin], o.deliveryType === "delivery" ? "Entrega" : o.deliveryType === "table" ? `Mesa ${o.tableNumber}` : "Retirada"]);
     const csv = [head, ...lines].map((r) => r.map((c) => `"${csvSafe(String(c)).replace(/"/g, '""')}"`).join(";")).join("\n");
     const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
@@ -199,7 +199,7 @@ export function SalesTable() {
                   {detail.address.reference && ` · Ref.: ${detail.address.reference}`}
                 </p>
               ) : (
-                <p className="text-ink-600">Retirada no local</p>
+                <p className="text-ink-600">{detail.deliveryType === "table" ? `Mesa ${detail.tableNumber}` : "Retirada no local"}</p>
               )}
             </div>
             <ul className="divide-y divide-cream-100 rounded-xl border border-cream-200">

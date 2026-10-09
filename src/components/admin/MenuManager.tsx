@@ -249,7 +249,7 @@ async function shrinkImage(file: File, max = 1800): Promise<File> {
   }
 }
 
-export function ImageUpload({ value, onChange, kind = "product", className = "" }: { value: string | null; onChange: (v: string | null) => void; kind?: "product" | "logo"; className?: string }) {
+export function ImageUpload({ value, onChange, kind = "product", className = "" }: { value: string | null; onChange: (v: string | null) => void; kind?: "product" | "logo" | "hero"; className?: string }) {
   const toast = useToast();
   const ref = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -287,7 +287,7 @@ export function ImageUpload({ value, onChange, kind = "product", className = "" 
     >
       {value ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={value} alt="Pré-visualização" className={`h-full w-full ${kind === "logo" ? "object-contain p-3" : "object-cover"}`} />
+        <img src={value} alt="Pré-visualização" className={`h-full w-full ${kind === "logo" || kind === "hero" ? "object-contain p-3" : "object-cover"}`} />
       ) : (
         <div className="grid h-full place-items-center p-4 text-center text-sm text-ink-500">
           <div>

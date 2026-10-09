@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Bike, Check, MessageCircle, Minus, Pencil, Plus, ShoppingBag, Store, Trash2, X } from "lucide-react";
+import { ArrowLeft, Bike, Check, MessageCircle, Minus, Pencil, Plus, ShoppingBag, Store, Trash2, UtensilsCrossed, X } from "lucide-react";
 import { useLockBody, useStore, type CartItem } from "./cart";
 import { centsToInput, formatPhone, money, parseMoney } from "@/lib/format";
 import type { DeliveryType } from "@/lib/types";
@@ -58,7 +58,7 @@ export function CartDrawer() {
 }
 
 function Content({ step, setStep, close }: { step: Step; setStep: (s: Step) => void; close: () => void }) {
-  const [result, setResult] = useState<{ number: number; total: number; url: string; name: string } | null>(null);
+  const [result, setResult] = useState<DoneResult | null>(null);
   const titles: Record<Step, string> = { cart: "SEU CARRINHO", checkout: "ENTREGA E PAGAMENTO", done: "PEDIDO ENVIADO" };
 
   return (
@@ -206,11 +206,16 @@ function Row({ label, value, muted, big }: { label: string; value: string; muted
   );
 }
 
-function CheckoutStep({ onDone }: { onDone: (r: { number: number; total: number; url: string; name: string }) => void }) {
-  const { items, subtotal, settings, clear } = useStore();
+type DoneResult = { number: number; total: number; url: string; name: string; table: number | null };
+
+function CheckoutStep({ onDone }: { onDone: (r: DoneResult) => void }) {
+  const { items, subtotal, settings, clear, table } = useStore();
   const payments = settings.payments.filter((p) => p.active);
   const [c, setC] = useState<Customer>({ customerName: "", phone: "", street: "", number: "", district: "", complement: "", reference: "", city: settings.city });
-  const [delivery, setDelivery] = useState<DeliveryType>("delivery");
+  // Quem abriu pelo QR Code da mesa já começa com "Mesa" selecionada.
+  const [delivery, setDelivery] = useState<DeliveryType>(table ? "table" : "delivery");
+  const [tableNumber, setTableNumber] = useState<number | null>(table);
+  const isTable = delivery === "table";
   const [payment, setPayment] = useState("");
   const [needChange, setNeedChange] = useState(false);
   const [changeFor, setChangeFor] = useState("");
@@ -234,7 +239,8 @@ function CheckoutStep({ onDone }: { onDone: (r: { number: number; total: number;
 
   const validate = (): string | null => {
     if (c.customerName.trim().length < 2) return "Informe seu nome completo.";
-    if (c.phone.replace(/\D/g, "").length < 10) return "Informe um telefone/WhatsApp válido com DDD.";
+    if (isTable && !tableNumber) return "Escolha o número da sua mesa.";
+    if (!isTable && c.phone.replace(/\D/g, "").length < 10) return "Informe um telefone/WhatsApp válido com DDD.";
     if (delivery === "delivery" && (!c.street.trim() || !c.number.trim() || !c.district.trim())) return "Preencha rua, número e bairro.";
     if (!payment) return "Escolha a forma de pagamento.";
     if (payObj?.allowChange && needChange) {
@@ -255,7 +261,8 @@ function CheckoutStep({ onDone }: { onDone: (r: { number: number; total: number;
     }
     setSending(true);
     // Abre a aba já no clique (evita bloqueio de pop-up) e depois aponta para o WhatsApp.
-    const win = window.open("", "_blank");
+    // Pedido na mesa vai direto para a cozinha (painel + impressora), sem WhatsApp.
+    const win = isTable ? null : window.open("", "_blank");
     if (win) win.opener = null;
     try {
       const res = await fetch("/api/orders", {
@@ -265,6 +272,7 @@ function CheckoutStep({ onDone }: { onDone: (r: { number: number; total: number;
           customerName: c.customerName,
           phone: c.phone,
           deliveryType: delivery,
+          tableNumber: isTable ? tableNumber : null,
           address: { street: c.street, number: c.number, district: c.district, complement: c.complement, reference: c.reference, city: c.city },
           payment,
           changeFor: payObj?.allowChange && needChange ? parseMoney(changeFor) : null,
@@ -284,10 +292,12 @@ function CheckoutStep({ onDone }: { onDone: (r: { number: number; total: number;
       try {
         localStorage.setItem(CUSTOMER_KEY, JSON.stringify(c));
       } catch {}
-      if (win) win.location.href = data.whatsappUrl;
-      else window.location.href = data.whatsappUrl;
+      if (!isTable) {
+        if (win) win.location.href = data.whatsappUrl;
+        else window.location.href = data.whatsappUrl;
+      }
       clear();
-      onDone({ number: data.order.number, total: data.order.total, url: data.whatsappUrl, name: c.customerName.split(" ")[0] });
+      onDone({ number: data.order.number, total: data.order.total, url: data.whatsappUrl, name: c.customerName.split(" ")[0], table: isTable ? tableNumber : null });
     } catch (e) {
       win?.close();
       setError(e instanceof Error ? e.message : "Erro ao enviar.");
@@ -309,26 +319,27 @@ function CheckoutStep({ onDone }: { onDone: (r: { number: number; total: number;
             <input id="ck-name" className="field" value={c.customerName} onChange={set("customerName")} autoComplete="name" placeholder="Seu nome" />
           </div>
           <div>
-            <label className={label} htmlFor="ck-phone">Telefone / WhatsApp</label>
+            <label className={label} htmlFor="ck-phone">
+              Telefone / WhatsApp{isTable && <span className="normal-case tracking-normal text-white/35"> (opcional)</span>}
+            </label>
             <input id="ck-phone" className="field" value={c.phone} onChange={set("phone")} inputMode="tel" autoComplete="tel" placeholder="(74) 99999-9999" />
           </div>
         </section>
 
         <section className="space-y-3">
           <h3 className={section}>Forma de entrega</h3>
-          <div className="grid grid-cols-2 gap-2">
-            {(
-              [
-                { v: "delivery", label: "Entrega", sub: settings.deliveryFee ? money(settings.deliveryFee) : "Grátis", Icon: Bike },
-                { v: "pickup", label: "Retirada", sub: "No local", Icon: Store },
-              ] as const
-            ).map(({ v, label: l, sub, Icon }) => (
+          <div className={`grid gap-2 ${settings.tablesEnabled ? "grid-cols-3" : "grid-cols-2"}`}>
+            {[
+              { v: "delivery" as const, label: "Entrega", sub: settings.deliveryFee ? money(settings.deliveryFee) : "Grátis", Icon: Bike },
+              { v: "pickup" as const, label: "Retirada", sub: "No local", Icon: Store },
+              ...(settings.tablesEnabled ? [{ v: "table" as const, label: "Mesa", sub: "Estou aqui", Icon: UtensilsCrossed }] : []),
+            ].map(({ v, label: l, sub, Icon }) => (
               <button
                 key={v}
                 onClick={() => setDelivery(v)}
                 className={`flex items-center gap-3 rounded-2xl border p-3.5 text-left transition ${delivery === v ? "border-gold-400 bg-gold-400/10" : "border-white/10 bg-white/[0.03]"}`}
               >
-                <Icon className={`h-6 w-6 ${delivery === v ? "text-gold-400" : "text-white/40"}`} />
+                <Icon className={`h-6 w-6 shrink-0 ${delivery === v ? "text-gold-400" : "text-white/40"}`} />
                 <span>
                   <span className="block font-extrabold">{l}</span>
                   <span className="block text-xs text-white/50">{sub}</span>
@@ -337,6 +348,28 @@ function CheckoutStep({ onDone }: { onDone: (r: { number: number; total: number;
             ))}
           </div>
         </section>
+
+        <AnimatePresence initial={false}>
+          {isTable && (
+            <motion.section initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="space-y-3 overflow-hidden">
+              <h3 className={section}>Sua mesa</h3>
+              <div className="grid grid-cols-5 gap-2" role="radiogroup" aria-label="Número da mesa">
+                {Array.from({ length: settings.tableCount }, (_, i) => i + 1).map((n) => (
+                  <button
+                    key={n}
+                    role="radio"
+                    aria-checked={tableNumber === n}
+                    onClick={() => setTableNumber(n)}
+                    className={`h-12 rounded-xl border text-base font-black transition ${tableNumber === n ? "border-gold-400 bg-gold-400 text-ink-950" : "border-white/10 bg-white/[0.03] text-white/80"}`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-white/45">O número fica na plaquinha ou no QR Code da sua mesa. Seu pedido vai direto para a cozinha.</p>
+            </motion.section>
+          )}
+        </AnimatePresence>
 
         <AnimatePresence initial={false}>
           {delivery === "delivery" && (
@@ -445,13 +478,15 @@ function CheckoutStep({ onDone }: { onDone: (r: { number: number; total: number;
         <button onClick={submit} disabled={sending || !items.length || !settings.isOpen} className="btn btn-flame mt-1 h-14 w-full text-base">
           {sending ? "Enviando…" : "FINALIZAR PEDIDO"}
         </button>
-        <p className="text-center text-xs text-white/40">Você será direcionado ao WhatsApp com o pedido pronto.</p>
+        <p className="text-center text-xs text-white/40">
+          {isTable ? "Seu pedido vai direto para a cozinha." : "Você será direcionado ao WhatsApp com o pedido pronto."}
+        </p>
       </div>
     </>
   );
 }
 
-function DoneStep({ result, close }: { result: { number: number; total: number; url: string; name: string }; close: () => void }) {
+function DoneStep({ result, close }: { result: DoneResult; close: () => void }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-5 p-8 text-center">
       <motion.div
@@ -467,11 +502,19 @@ function DoneStep({ result, close }: { result: { number: number; total: number; 
         <p className="mt-2 text-white/60">
           Pedido <b className="text-gold-300">nº {result.number}</b> registrado — total <b className="text-white">{money(result.total)}</b>.
         </p>
-        <p className="mt-3 max-w-xs text-sm text-white/50">Abrimos o WhatsApp com todos os detalhes. É só tocar em enviar para confirmar com a pizzaria.</p>
+        {result.table ? (
+          <p className="mx-auto mt-3 max-w-xs text-sm text-white/50">
+            Seu pedido já foi para a cozinha. É só aguardar na <b className="text-gold-300">mesa {result.table}</b> que levamos até você.
+          </p>
+        ) : (
+          <p className="mx-auto mt-3 max-w-xs text-sm text-white/50">Abrimos o WhatsApp com todos os detalhes. É só tocar em enviar para confirmar com a pizzaria.</p>
+        )}
       </div>
-      <a href={result.url} target="_blank" rel="noopener noreferrer" className="btn h-14 w-full max-w-xs bg-[#25D366] text-base text-ink-950 hover:bg-[#3be07a]">
-        <MessageCircle className="h-5 w-5" /> Abrir WhatsApp novamente
-      </a>
+      {!result.table && (
+        <a href={result.url} target="_blank" rel="noopener noreferrer" className="btn h-14 w-full max-w-xs bg-[#25D366] text-base text-ink-950 hover:bg-[#3be07a]">
+          <MessageCircle className="h-5 w-5" /> Abrir WhatsApp novamente
+        </a>
+      )}
       <button onClick={close} className="btn btn-ghost h-12 w-full max-w-xs">
         Voltar ao cardápio
       </button>

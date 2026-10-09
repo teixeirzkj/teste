@@ -27,7 +27,7 @@ function wedge(i: number) {
   return `polygon(50% 50%, ${pts.join(", ")})`;
 }
 
-function Slice({ i, offset, lift }: { i: number; offset?: MotionValue<number>; lift?: boolean }) {
+function Slice({ i, offset, lift, src }: { i: number; offset?: MotionValue<number>; lift?: boolean; src: string }) {
   const mid = ((i + 0.5) * 360) / SLICES;
   const rad = (mid * Math.PI) / 180;
   const zero = useMotionValue(0);
@@ -46,7 +46,7 @@ function Slice({ i, offset, lift }: { i: number; offset?: MotionValue<number>; l
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/img/hero-pizza.webp"
+        src={src}
         alt=""
         draggable={false}
         className="absolute inset-0 h-full w-full select-none"
@@ -258,6 +258,7 @@ export function Hero() {
                     <Slice
                       key={i}
                       i={i}
+                      src={settings.heroImage}
                       offset={i === 1 ? slice1 : i === 5 ? slice2 : undefined}
                       lift={i === 1 && isDesktop}
                     />

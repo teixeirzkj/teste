@@ -20,7 +20,7 @@ export function scrollToId(id: string) {
 }
 
 export function Header() {
-  const { settings, count, setCartOpen } = useStore();
+  const { settings, count, setCartOpen, table } = useStore();
   const [solid, setSolid] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -65,6 +65,11 @@ export function Header() {
           </nav>
 
           <div className="flex items-center gap-2">
+            {table && (
+              <span className="rounded-full border border-gold-400/40 bg-gold-400/10 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-gold-300" title="Você está fazendo o pedido para esta mesa">
+                Mesa {table}
+              </span>
+            )}
             <button
               onClick={() => setCartOpen(true)}
               className="btn btn-gold relative h-11 px-4 text-sm"

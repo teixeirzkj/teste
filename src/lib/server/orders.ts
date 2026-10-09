@@ -19,8 +19,10 @@ export const orderItemSchema = z.object({
 
 export const orderSchema = z.object({
   customerName: str(100).min(2, "Informe seu nome completo."),
-  phone: str(20).refine((v) => v.replace(/\D/g, "").length >= 10, "Informe um telefone válido com DDD."),
-  deliveryType: z.enum(["delivery", "pickup"]),
+  // Telefone é obrigatório na entrega/retirada (validado em createOrder); na mesa é opcional.
+  phone: str(20).default(""),
+  deliveryType: z.enum(["delivery", "pickup", "table"]),
+  tableNumber: z.number().int().min(1).max(300).nullable().default(null),
   address: z
     .object({
       street: str(120).default(""),
@@ -38,7 +40,7 @@ export const orderSchema = z.object({
 });
 
 export const adminOrderSchema = orderSchema.extend({
-  origin: z.enum(["site", "balcao", "telefone", "whatsapp"]).default("balcao"),
+  origin: z.enum(["site", "mesa", "balcao", "telefone", "whatsapp"]).default("balcao"),
   status: z.enum(["pending", "preparing", "delivering", "done"]).default("preparing"),
   deliveryFee: z.number().int().min(0).max(1000_00).nullable().default(null),
   phone: str(20).default(""),
@@ -76,6 +78,7 @@ function rowToOrder(r: Row, items: OrderItem[]): Order {
     customerName: String(r.customer_name),
     phone: String(r.phone),
     deliveryType: r.delivery_type as Order["deliveryType"],
+    tableNumber: r.table_number == null ? null : Number(r.table_number),
     address: { ...EMPTY_ADDRESS, ...json<Partial<Address>>(r.address, {}) },
     payment: String(r.payment),
     changeFor: r.change_for == null ? null : Number(r.change_for),
@@ -176,6 +179,16 @@ export async function createOrder(input: OrderInput, opts: CreateOpts): Promise<
   const payment = settings.payments.find((p) => p.name === input.payment && (p.active || !opts.enforceStore));
   if (!payment && opts.enforceStore) throw new OrderError("Forma de pagamento indisponível.");
 
+  const isTable = input.deliveryType === "table";
+  if (isTable) {
+    if (!input.tableNumber) throw new OrderError("Escolha o número da mesa.");
+    if (opts.enforceStore && (!settings.tablesEnabled || input.tableNumber > settings.tableCount)) {
+      throw new OrderError("Mesa inválida. Confira o número da sua mesa.");
+    }
+  } else if (opts.enforceStore && input.phone.replace(/\D/g, "").length < 10) {
+    throw new OrderError("Informe um telefone válido com DDD.");
+  }
+
   if (input.deliveryType === "delivery" && opts.enforceStore) {
     const a = input.address;
     if (!a.street || !a.number || !a.district) throw new OrderError("Preencha rua, número e bairro para a entrega.");
@@ -255,8 +268,8 @@ export async function createOrder(input: OrderInput, opts: CreateOpts): Promise<
 
   const id = await tx(async (d) => {
     const [o] = await d.query<{ id: number }>(
-      `INSERT INTO orders (number, customer_name, phone, delivery_type, address, payment, change_for, subtotal, delivery_fee, total, cost, status, origin, notes)
-       VALUES (nextval('order_number_seq'), $1, $2, $3, $4::text::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
+      `INSERT INTO orders (number, customer_name, phone, delivery_type, address, payment, change_for, subtotal, delivery_fee, total, cost, status, origin, notes, table_number)
+       VALUES (nextval('order_number_seq'), $1, $2, $3, $4::text::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id`,
       [
         input.customerName,
         phone,
@@ -269,8 +282,10 @@ export async function createOrder(input: OrderInput, opts: CreateOpts): Promise<
         total,
         cost,
         opts.status,
-        opts.origin,
+        // Pedido feito pelo cardápio na mesa aparece com origem "Mesa".
+        isTable && opts.origin === "site" ? "mesa" : opts.origin,
         input.notes,
+        isTable ? input.tableNumber : null,
       ]
     );
     await d.query(

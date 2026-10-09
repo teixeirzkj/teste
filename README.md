@@ -69,6 +69,20 @@ As imagens enviadas pelo painel ficam no próprio banco (tabela `uploads`) e sã
 3. O WhatsApp da pizzaria (configurável) abre com a mensagem preenchida.
 4. O pedido aparece em **Pedidos** com alerta sonoro: Pendente → Em preparo → Saiu para entrega → Finalizado. Só pedidos finalizados entram no faturamento.
 
+### Pedido na mesa
+- Ligue em **Configurações → Mesas** e informe quantas mesas existem.
+- **Imprimir QR Codes das mesas** gera uma plaquinha por mesa. O QR abre `/?mesa=N`, e o checkout já vem com "Mesa N" selecionada.
+- Na mesa o telefone é opcional, não há taxa de entrega e o WhatsApp não é aberto: o pedido vai direto para **Pedidos** (selo "MESA N") e para a maquininha.
+- No balcão, a **Nova venda** também tem a opção "Mesa".
+
+### Impressão na maquininha (webhook)
+Em **Configurações → Impressão na maquininha**, informe o endereço `https://` que recebe os pedidos (o webhook do app da maquininha ou uma automação, ex. n8n) e, se houver, o token.
+
+- **Quando envia:** a cada pedido do site e a cada nova venda (dá para ligar e desligar cada um), e no botão **Imprimir** de cada pedido.
+- **Corpo:** `POST` JSON com `evento` (`pedido_novo`, `nova_venda`, `reimpressao` ou `teste`), `pedido` (dados estruturados) e `texto` (pronto para impressora térmica, igual à mensagem do WhatsApp, sem emojis).
+- **Com token:** vai junto `Authorization: Bearer <token>` e `X-Pizzaria-Assinatura: sha256=<HMAC do corpo>`.
+- **Segurança:** o endereço e o token nunca vão para o navegador do cliente. No painel, o token aparece mascarado.
+
 ## Segurança aplicada
 
 - Senhas com scrypt; sessão em cookie `HttpOnly` + `SameSite=Lax` + `Secure`, assinado com HMAC.
@@ -82,4 +96,8 @@ As imagens enviadas pelo painel ficam no próprio banco (tabela `uploads`) e sã
 
 ## Imagens
 
-As fotos iniciais são do Unsplash (licença livre) e servem de exemplo. **As das pizzas doces não mostram pizzas.** Troque por fotos reais em Cardápio → Editar → Trocar imagem. Veja também `../Prompts_Imagens_Pizzaria_Sao_Paulo.md`.
+As fotos padrão dos produtos ficam em `public/img/produtos/` (uma por item do cardápio).
+
+- **Trocar ou remover a foto de um produto:** Cardápio → Editar → Trocar imagem ou ✕. Produtos novos recebem foto do mesmo jeito.
+- **Pizza da abertura e foto do "Sobre nós":** Configurações → Imagens do site. A pizza é recortada em círculo automaticamente.
+- **Migração:** ao subir fotos padrão novas, ela troca só as fotos que ainda são as padrão. Uma imagem enviada pelo painel nunca é substituída.

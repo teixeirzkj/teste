@@ -59,6 +59,8 @@ export const settingsSchema = z
     storeName: str(80).min(1),
     tagline: str(120),
     logo: z.string().trim().max(200).regex(/^\/(img|uploads)\/[\w.\-/]+$|^\/logo\.webp$/),
+    heroImage: z.string().trim().max(200).regex(/^\/(img|uploads)\/[\w.\-/]+$|^\/logo\.webp$/),
+    aboutImage: z.string().trim().max(200).regex(/^\/(img|uploads)\/[\w.\-/]+$|^\/logo\.webp$/),
     phone: str(30),
     whatsapp: str(30).refine((v) => v.replace(/\D/g, "").length >= 10, "WhatsApp inválido (use DDD + número)."),
     address: str(200),
@@ -81,8 +83,36 @@ export const settingsSchema = z
     openMessage: str(120),
     closedMessage: str(160),
     defaultCostPercent: z.number().min(0).max(100),
+    tablesEnabled: z.boolean(),
+    tableCount: z.number().int().min(1).max(300),
+    printWebhookUrl: z
+      .string()
+      .trim()
+      .max(500)
+      .refine((v) => v === "" || isSafeWebhook(v), "Use um endereço https:// público (ex.: o link da sua maquininha ou do n8n)."),
+    printWebhookToken: z.string().trim().max(500),
+    printOnSiteOrder: z.boolean(),
+    printOnNewSale: z.boolean(),
   })
   .partial();
+
+/** Webhook de impressão: só https e nunca endereços internos (evita SSRF). */
+export function isSafeWebhook(v: string): boolean {
+  // Em desenvolvimento, permite um receptor local para testes.
+  if (process.env.NODE_ENV !== "production" && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(v)) return true;
+  try {
+    const u = new URL(v);
+    if (u.protocol !== "https:") return false;
+    const h = u.hostname.toLowerCase();
+    if (h === "localhost" || h.endsWith(".local") || h.endsWith(".internal")) return false;
+    if (/^(127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(h)) return false;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return false;
+    if (h.startsWith("[") || h === "::1") return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export const userSchema = z.object({
   name: str(80).min(1, "Informe o nome."),

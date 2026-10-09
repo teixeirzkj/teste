@@ -1,6 +1,7 @@
 import "server-only";
 import type { Db } from "./db";
 import { json } from "./db";
+import { slugify } from "../format";
 import { hashPassword } from "./password";
 import type { Settings, Size } from "../types";
 
@@ -8,6 +9,8 @@ export const DEFAULT_SETTINGS: Settings = {
   storeName: "Pizzaria São Paulo",
   tagline: "Feita para ser lembrada",
   logo: "/logo.webp",
+  heroImage: "/img/hero-pizza.webp",
+  aboutImage: "/img/sobre.webp",
   phone: "(74) 99949-6531",
   whatsapp: "74999496531",
   address: "Andaraí",
@@ -32,6 +35,12 @@ export const DEFAULT_SETTINGS: Settings = {
   openMessage: "Estamos recebendo pedidos!",
   closedMessage: "Estamos fechados no momento.",
   defaultCostPercent: 45,
+  tablesEnabled: false,
+  tableCount: 10,
+  printWebhookUrl: "",
+  printWebhookToken: "",
+  printOnSiteOrder: true,
+  printOnNewSale: true,
 };
 
 const R = (v: number) => Math.round(v * 100);
@@ -56,17 +65,20 @@ type SeedProduct = {
   soldOut?: boolean; // "Esgotado" no cardápio antigo: entra desativado
 };
 
+/** Caminho da foto padrão de um produto (arquivos em public/img/produtos). */
+const photo = (name: string) => `/img/produtos/${slugify(name.replace(/\(.*?\)/g, "").replace(/[.\s-]+$/, ""))}.webp`;
+
 const pz = (name: string, description: string, price: number, image: string, extra: Partial<SeedProduct> = {}): SeedProduct => ({
   name,
   description,
-  image: `/img/${image}.webp`,
+  image: photo(name),
   sizes: pizzaSizes(price),
   ...extra,
 });
 const drink = (name: string, price: number, image: string, extra: Partial<SeedProduct> = {}): SeedProduct => ({
   name,
   description: "",
-  image: `/img/${image}.webp`,
+  image: photo(name),
   sizes: single(price),
   ...extra,
 });
@@ -75,7 +87,7 @@ const drink = (name: string, price: number, image: string, extra: Partial<SeedPr
 const CATALOG: { name: string; image: string; products: SeedProduct[] }[] = [
   {
     name: "Pizzas",
-    image: "/img/calabresa.webp",
+    image: photo("Calabresa com Mussarela"),
     products: [
       pz("Atum Sólido", "Atum em pedaços com mussarela e tomate, com ou sem cebola!", 45, "bacon-cebola"),
       pz("Brócolis com Palmito", "Brócolis com palmito e catupiry ervas finas.", 40, "sao-paulo-especial"),
@@ -124,12 +136,12 @@ const CATALOG: { name: string; image: string; products: SeedProduct[] }[] = [
   },
   {
     name: "Esfiha Aberta",
-    image: "/img/esfiha.webp",
-    products: [{ name: "Esfiha", description: "Esfiha tipo Habib's.", image: "/img/esfiha.webp", sizes: single(5) }],
+    image: photo("Esfiha"),
+    products: [{ name: "Esfiha", description: "Esfiha tipo Habib's.", image: photo("Esfiha"), sizes: single(5) }],
   },
   {
     name: "Bebidas",
-    image: "/img/bebida-guarana.webp",
+    image: photo("Guaraná litro"),
     products: [
       drink("Água mineral", 2, "bebida-agua"),
       drink("Bohemia lata", 4, "bebida-bohemia", { soldOut: true }),
@@ -146,6 +158,28 @@ const CATALOG: { name: string; image: string; products: SeedProduct[] }[] = [
 
 /** Versão do cardápio inicial: ao mudar, bancos já criados recebem o cardápio novo. */
 const CATALOG_VERSION = "2";
+/** Versão das fotos padrão dos produtos. */
+const IMAGES_VERSION = "2";
+
+async function ensureImages(root: Db) {
+  const [v] = await root.query<{ value: string }>("SELECT value FROM meta WHERE key = 'images_version'");
+  if (v?.value === IMAGES_VERSION) return;
+  const rows = CATALOG.flatMap((c) => c.products.map((p) => ({ name: p.name, image: p.image })));
+  await root.query(
+    `UPDATE products p SET image = x.image, updated_at = NOW()
+     FROM jsonb_to_recordset($1::text::jsonb) AS x(name text, image text)
+     WHERE p.name = x.name AND (p.image IS NULL OR p.image LIKE '/img/%')`,
+    [JSON.stringify(rows)]
+  );
+  // Imagens das categorias também (só as padrão).
+  await root.query(
+    `UPDATE categories c SET image = x.image
+     FROM jsonb_to_recordset($1::text::jsonb) AS x(name text, image text)
+     WHERE c.name = x.name AND (c.image IS NULL OR c.image LIKE '/img/%')`,
+    [JSON.stringify(CATALOG.map((c) => ({ name: c.name, image: c.image })))]
+  );
+  await root.query("INSERT INTO meta (key, value) VALUES ('images_version', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", [IMAGES_VERSION]);
+}
 
 async function insertCatalog(db: Db) {
   for (const [ci, cat] of CATALOG.entries()) {
@@ -332,7 +366,10 @@ async function ensureCatalog(root: Db) {
 
 export async function ensureSeed(root: Db) {
   const done = await root.query("SELECT value FROM meta WHERE key = 'seeded'");
-  if (done.length) return ensureCatalog(root);
+  if (done.length) {
+    await ensureCatalog(root);
+    return ensureImages(root);
+  }
   await root.tx(async (db) => {
     // Trava para duas instâncias não semearem ao mesmo tempo.
     await db.query("SELECT pg_advisory_xact_lock(424242)");

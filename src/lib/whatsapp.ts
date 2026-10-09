@@ -9,7 +9,7 @@ export function buildOrderMessage(order: Order, settings: Settings): string {
   L.push(`🧾 *Pedido nº ${order.number}*`);
   L.push("");
   L.push(`👤 *Cliente:* ${order.customerName}`);
-  L.push(`📱 *Telefone:* ${order.phone}`);
+  if (order.phone) L.push(`📱 *Telefone:* ${order.phone}`);
   L.push("");
   L.push("📦 *Pedido:*");
   for (const it of order.items) {
@@ -40,6 +40,8 @@ export function buildOrderMessage(order: Order, settings: Settings): string {
     if (a.complement) L.push(`Complemento: ${a.complement}`);
     if (a.reference) L.push(`Referência: ${a.reference}`);
     if (a.city) L.push(`Cidade: ${a.city}`);
+  } else if (order.deliveryType === "table") {
+    L.push(`🍽️ *MESA ${order.tableNumber ?? "?"}* — consumo no local`);
   } else {
     L.push("🏪 *Retirada no local*");
   }

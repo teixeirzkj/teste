@@ -35,6 +35,8 @@ type Ctx = StoreData & {
   closeProduct: () => void;
   toast: string | null;
   showToast: (msg: string) => void;
+  /** Mesa do cliente (QR Code da mesa: /?mesa=10). */
+  table: number | null;
 };
 
 const StoreCtx = createContext<Ctx | null>(null);
@@ -46,6 +48,20 @@ export function StoreProvider({ data, children }: { data: StoreData; children: R
   const [cartOpen, setCartOpen] = useState(false);
   const [modal, setModal] = useState<Ctx["modal"]>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [table, setTable] = useState<number | null>(null);
+
+  // Lê a mesa do link do QR Code e lembra durante a visita.
+  useEffect(() => {
+    const { tablesEnabled, tableCount } = data.settings;
+    if (!tablesEnabled) return;
+    let n = Number(new URLSearchParams(window.location.search).get("mesa"));
+    try {
+      if (n) sessionStorage.setItem("psp-mesa", String(n));
+      else n = Number(sessionStorage.getItem("psp-mesa"));
+    } catch {}
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (Number.isInteger(n) && n >= 1 && n <= tableCount) setTable(n);
+  }, [data.settings]);
 
   useEffect(() => {
     try {
@@ -107,8 +123,9 @@ export function StoreProvider({ data, children }: { data: StoreData; children: R
       closeProduct: () => setModal(null),
       toast,
       showToast,
+      table,
     }),
-    [data, items, add, cartOpen, modal, toast, showToast]
+    [data, items, add, cartOpen, modal, toast, showToast, table]
   );
 
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;

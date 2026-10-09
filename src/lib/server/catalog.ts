@@ -62,10 +62,15 @@ export async function getProduct(id: number): Promise<Product | null> {
   return r ? rowToProduct(r) : null;
 }
 
+/** Configurações que podem ir para o navegador do cliente (sem os dados da impressora). */
+export function publicSettings(s: Settings): Settings {
+  return { ...s, printWebhookUrl: "", printWebhookToken: "" };
+}
+
 /** Dados públicos da loja (somente itens ativos). */
 export async function getStorefront() {
   const [settings, categories, products] = await Promise.all([getSettings(), listCategories(true), listProducts(true)]);
-  return { settings, categories, products };
+  return { settings: publicSettings(settings), categories, products };
 }
 
 export type ProductInput = Omit<Product, "id" | "sort"> & { sort?: number };
